@@ -10,22 +10,48 @@ interface CatalogEntry {
   status: Exclude<ResponseStatus, 'completed'>;
   /** Código HTTP en el camino directo y para fallos técnicos (sección 7.5). */
   httpStatus: number;
+  /** Resultado de negocio: en /agent/* responde 200 y el detalle va en `status`. */
+  business?: true;
 }
 
 export const ERROR_CATALOG = {
   // Sección 9.1
-  CUSTOMER_NOT_FOUND: { status: 'rejected', httpStatus: 422 },
-  AMBIGUOUS_CUSTOMER: { status: 'needs_clarification', httpStatus: 422 },
-  MISSING_FIELDS: { status: 'needs_clarification', httpStatus: 422 },
-  UNKNOWN_INTENT: { status: 'needs_clarification', httpStatus: 422 },
-  INVALID_AMOUNT: { status: 'needs_clarification', httpStatus: 422 },
-  TOTAL_EXCEEDS_LIMIT: { status: 'rejected', httpStatus: 422 },
-  PAYMENT_MISMATCH: { status: 'rejected', httpStatus: 422 },
-  INVOICE_NOT_PAYABLE: { status: 'rejected', httpStatus: 422 },
-  EXTRACTION_FAILED: { status: 'needs_clarification', httpStatus: 200 },
+  CUSTOMER_NOT_FOUND: { status: 'rejected', httpStatus: 422, business: true },
+  AMBIGUOUS_CUSTOMER: {
+    status: 'needs_clarification',
+    httpStatus: 422,
+    business: true,
+  },
+  MISSING_FIELDS: {
+    status: 'needs_clarification',
+    httpStatus: 422,
+    business: true,
+  },
+  UNKNOWN_INTENT: {
+    status: 'needs_clarification',
+    httpStatus: 422,
+    business: true,
+  },
+  INVALID_AMOUNT: {
+    status: 'needs_clarification',
+    httpStatus: 422,
+    business: true,
+  },
+  TOTAL_EXCEEDS_LIMIT: { status: 'rejected', httpStatus: 422, business: true },
+  PAYMENT_MISMATCH: { status: 'rejected', httpStatus: 422, business: true },
+  INVOICE_NOT_PAYABLE: { status: 'rejected', httpStatus: 422, business: true },
+  EXTRACTION_FAILED: {
+    status: 'needs_clarification',
+    httpStatus: 200,
+    business: true,
+  },
   LLM_UNAVAILABLE: { status: 'error', httpStatus: 502 },
   DB_ERROR: { status: 'error', httpStatus: 500 },
   INTERNAL_ERROR: { status: 'error', httpStatus: 500 },
+  // Propuestos por el orquestador (Cristian): cuenta o comprobante inexistente.
+  // Pendientes de registrar en el contrato.
+  INVOICE_NOT_FOUND: { status: 'rejected', httpStatus: 404, business: true },
+  RECEIPT_NOT_FOUND: { status: 'rejected', httpStatus: 404, business: true },
   // Errores de plataforma (secciones 7.5 y 10.1). Pendientes de registrar en el contrato.
   VALIDATION_ERROR: { status: 'rejected', httpStatus: 400 },
   UNAUTHORIZED: { status: 'rejected', httpStatus: 401 },
@@ -45,8 +71,10 @@ export interface CatalogError {
   message: string;
   /** Para MISSING_FIELDS y similares: rutas como "customer.document_number". */
   missingFields?: string[];
-  /** Fuerza un código HTTP, por ejemplo 504 para LLM_UNAVAILABLE por timeout. */
+  /** Fuerza un código HTTP. */
   httpStatus?: number;
+  /** LLM_UNAVAILABLE por timeout: responde 504 en vez de 502 (LlmUnavailableError). */
+  timedOut?: boolean;
 }
 
 export function isErrorCode(value: unknown): value is ErrorCode {

@@ -62,9 +62,32 @@ class FakeController {
 
   @Get('agent/llm-timeout')
   llmTimeout() {
+    // Misma forma que LlmUnavailableError del módulo agent.
     throw Object.assign(new Error('Fireworks no respondió a tiempo.'), {
       code: 'LLM_UNAVAILABLE',
-      httpStatus: 504,
+      timedOut: true,
+    });
+  }
+
+  @Get('agent/llm-down')
+  llmDown() {
+    throw Object.assign(new Error('Fireworks respondió 503.'), {
+      code: 'LLM_UNAVAILABLE',
+      timedOut: false,
+    });
+  }
+
+  @Get('billing/invoice-not-found')
+  invoiceNotFound() {
+    throw Object.assign(new Error('La cuenta de cobro no existe.'), {
+      code: 'INVOICE_NOT_FOUND',
+    });
+  }
+
+  @Get('agent/invoice-not-found')
+  agentInvoiceNotFound() {
+    throw Object.assign(new Error('La cuenta de cobro no existe.'), {
+      code: 'INVOICE_NOT_FOUND',
     });
   }
 
@@ -268,6 +291,20 @@ describe('Plataforma (e2e)', () => {
         data: null,
         missing_fields: ['customer.document_number'],
       });
+    });
+
+    it('modelo caído sin timeout: 502 error', async () => {
+      const res = await authed('get', '/agent/llm-down').expect(502);
+      expect(res.body.data).toEqual({ error_code: 'LLM_UNAVAILABLE' });
+    });
+
+    it('cuenta inexistente: 404 en el camino directo y 200 rejected en /agent', async () => {
+      const direct = await authed('get', '/billing/invoice-not-found').expect(
+        404,
+      );
+      expect(direct.body.data).toEqual({ error_code: 'INVOICE_NOT_FOUND' });
+      const agent = await authed('get', '/agent/invoice-not-found').expect(200);
+      expect(agent.body.status).toBe('rejected');
     });
 
     it('timeout del modelo: 504 error', async () => {

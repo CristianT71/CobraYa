@@ -80,8 +80,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
     const entry = ERROR_CATALOG[t.code];
-    const isBusinessResult =
-      entry.status !== 'error' && entry.httpStatus === 422;
+    const isBusinessResult = 'business' in entry;
     const httpStatus =
       t.httpStatus ??
       (isBusinessResult && AGENT_PATH.test(req.path) ? 200 : entry.httpStatus);
@@ -124,7 +123,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code: exception.code,
         message: exception.message,
         missingFields: exception.missingFields ?? [],
-        httpStatus: exception.httpStatus,
+        httpStatus:
+          exception.httpStatus ??
+          (exception.timedOut === true
+            ? HttpStatus.GATEWAY_TIMEOUT
+            : undefined),
       };
     }
 
