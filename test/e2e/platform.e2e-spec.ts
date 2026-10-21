@@ -167,6 +167,19 @@ describe('Plataforma (e2e)', () => {
         .send({ text: 'hola' })
         .expect(401);
     });
+
+    it('una ruta inexistente sin X-API-Key también responde 401', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/no-existe')
+        .expect(401);
+      expect(res.body.data).toEqual({ error_code: 'UNAUTHORIZED' });
+    });
+
+    it('nunca devuelve la cédula completa en el mensaje', async () => {
+      const res = await authed('get', '/no-existe?doc=1032456789').expect(404);
+      expect(res.body.message).toContain('****6789');
+      expect(JSON.stringify(res.body)).not.toContain('1032456789');
+    });
   });
 
   describe('request_id', () => {
