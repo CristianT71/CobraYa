@@ -59,6 +59,15 @@ npm run test:e2e    # HTTP completas con el extractor simulado (test/e2e)
 npm run lint
 ```
 
+Las e2e de la aplicación completa (`test/e2e/app.e2e-spec.ts`) necesitan un PostgreSQL de prueba con las migraciones aplicadas; si `E2E_DATABASE_URL` no está definida, se omiten:
+
+```bash
+E2E_DATABASE_URL=postgres://usuario:clave@localhost:5432/base_de_prueba npm run test:e2e
+# PowerShell: $env:E2E_DATABASE_URL="postgres://..."; npm run test:e2e
+```
+
+Para nuevas e2e usa `createTestApp()`, `resetDatabase()` y `api()` de `test/e2e/support/test-app.ts`.
+
 Ninguna de estas pruebas llama al LLM real. El dataset dorado (`test/golden/`) se ejecuta aparte contra el modelo.
 
 ## Estructura
