@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration from './common/config/configuration';
 import { validateEnv } from './common/config/env.validation';
+import { AgentModule } from './agent/agent.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -25,8 +26,9 @@ import { HealthModule } from './health/health.module';
       }),
     }),
     HealthModule,
+    AgentModule,
     // Se agregan a medida que cada módulo llegue a main:
-    // CustomersModule (Zaidy), BillingModule (Jheison y Zaidy), AgentModule (Cristian).
+    // CustomersModule (Zaidy), BillingModule (Jheison y Zaidy).
   ],
 })
 export class AppModule {}
