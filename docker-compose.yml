@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16
+    container_name: facturacion-db
+    environment:
+      POSTGRES_USER: facturacion
+      POSTGRES_PASSWORD: facturacion
+      POSTGRES_DB: facturacion
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U facturacion -d facturacion"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db_test:
+    image: postgres:16
+    container_name: facturacion-db-test
+    environment:
+      POSTGRES_USER: facturacion
+      POSTGRES_PASSWORD: facturacion
+      POSTGRES_DB: facturacion_test
+    ports:
+      - "${DB_TEST_PORT:-5433}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U facturacion -d facturacion_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
