@@ -39,6 +39,14 @@ describe('extraction.prompt', () => {
       'el valor unitario ausente se reporta en missing_fields',
       /items\[N\]\.unit_price/,
     ],
+    [
+      'cobrar ítems y decir que ya pagó sigue siendo create_invoice',
+      /ya pagó, sigue siendo create_invoice/,
+    ],
+    [
+      'el valor de un ítem va en unit_price y no en payment.amount',
+      /SIEMPRE en items\[\]\.unit_price/,
+    ],
   ])('conserva la regla: %s', (_name, pattern) => {
     expect(EXTRACTION_SYSTEM_PROMPT).toMatch(pattern);
   });
