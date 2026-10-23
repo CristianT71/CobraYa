@@ -189,6 +189,23 @@ describe('comandos', () => {
     });
   });
 
+  it('escribe la primera letra de la descripción en mayúscula y recorta espacios', () => {
+    const command = toCreateInvoiceCommand(
+      extraction({
+        items: [
+          { description: '  cambio de aceite ', quantity: 1, unit_price: '1' },
+          { description: 'ñandú', quantity: 1, unit_price: '1' },
+        ],
+      }),
+      'cust-1',
+      'idem-1',
+    );
+    expect(command.items.map((item) => item.description)).toEqual([
+      'Cambio de aceite',
+      'Ñandú',
+    ]);
+  });
+
   it('sin método de pago la cuenta queda sin pago (RN-05)', () => {
     const command = toCreateInvoiceCommand(
       extraction({ payment: noPayment }),
