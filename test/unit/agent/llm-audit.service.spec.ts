@@ -1,5 +1,8 @@
 import type { Repository } from 'typeorm';
-import { LlmAuditService } from '../../../src/agent/llm/llm-audit.service';
+import {
+  LlmAuditService,
+  NO_REQUEST_ID,
+} from '../../../src/agent/llm/llm-audit.service';
 import type { LlmCallRecord } from '../../../src/agent/llm/llm-call-record';
 import type { LlmCallLog } from '../../../src/agent/llm/llm-call-log.entity';
 import {
@@ -110,6 +113,14 @@ describe('LlmAuditService', () => {
       'Cóbrale a la cédula ****6789 un cambio de aceite de 80.000',
     );
     expect(JSON.stringify(row)).not.toContain('1032456789');
+  });
+
+  it('guarda un request_id de respaldo si la llamada no trae contexto', async () => {
+    const { service, insert } = setup();
+    await service.record({ ...call, requestId: null });
+
+    const [row] = insert.mock.calls[0] as [Partial<LlmCallLog>];
+    expect(row.requestId).toBe(NO_REQUEST_ID);
   });
 
   it('recorta el request_id a la longitud de la columna', async () => {

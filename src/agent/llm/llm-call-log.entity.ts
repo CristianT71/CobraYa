@@ -13,8 +13,8 @@ export class LlmCallLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'request_id', type: 'varchar', length: 64, nullable: true })
-  requestId: string | null;
+  @Column({ name: 'request_id', type: 'varchar', length: 64 })
+  requestId: string;
 
   @Column({ name: 'prompt_version', type: 'varchar', length: 20 })
   promptVersion: string;
