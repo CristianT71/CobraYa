@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { InvoiceResultData } from '../dto/invoice-result.dto';
 import { Invoice } from '../entities/invoice.entity';
-import { InvoiceNotFoundError } from '../errors/direct-path.errors';
+import { InvoiceNotFoundError } from '../domain/billing.errors';
 import { toInvoiceResultData } from '../mappers/invoice-result.mapper';
 
 @Injectable()

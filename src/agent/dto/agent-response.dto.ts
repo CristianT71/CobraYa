@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { DocumentType, PaymentMethod } from '../llm/extraction.schema';
+import type { InvoiceResultData } from '../../billing/dto/invoice-result.dto';
 
 // Envoltorio único de respuesta del camino con IA (contrato, sección 7.4).
 
@@ -11,32 +11,8 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
-// Forma de `data` en una respuesta completed de create_invoice o
-// register_payment. Todo monto es texto decimal y la cédula va enmascarada.
-export interface InvoiceResultData {
-  invoice_id: string;
-  customer: {
-    document_type: DocumentType;
-    document_number: string;
-    full_name: string;
-  };
-  items: Array<{
-    description: string;
-    quantity: number;
-    unit_price: string;
-    line_total: string;
-  }>;
-  subtotal: string;
-  tax_rate: string;
-  tax_amount: string;
-  total: string;
-  payment: {
-    method: PaymentMethod;
-    amount: string;
-    status: 'APPLIED';
-  } | null;
-  receipt: { receipt_number: number; issued_at: string } | null;
-}
+// La forma de `data` de una cuenta vive en billing; agent la reexporta.
+export type { InvoiceResultData };
 
 // Forma de `data` en rejected y error (contrato, sección 9).
 export interface ErrorData {

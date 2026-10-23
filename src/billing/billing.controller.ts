@@ -5,7 +5,7 @@ import { CustomersService } from '../customers/customers.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import {InvoiceResultResponseDto,type InvoiceResultData,} from './dto/invoice-result.dto';
 import { RegisterPaymentDto } from './dto/register-payment.dto';
-import {AmbiguousCustomerError,CustomerNotFoundError,} from './errors/direct-path.errors';
+import {AmbiguousCustomerError,CustomerNotFoundError,} from './domain/billing.errors';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import {CREATE_INVOICE_USE_CASE,GET_RECEIPT_USE_CASE,REGISTER_PAYMENT_USE_CASE,type CreateInvoiceUseCasePort,type GetReceiptUseCasePort,type RegisterPaymentUseCasePort,} from './ports/billing-use-cases.port';
 import { InvoiceQueryService } from './queries/invoice-query.service';

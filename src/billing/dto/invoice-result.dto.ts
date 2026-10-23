@@ -1,9 +1,33 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { InvoiceResultData } from '../../agent/dto/agent-response.dto';
+import type { DocumentType } from '../../customers/customer.entity';
+import type { PaymentMethod } from '../entities/payment.entity';
 
-// Único punto de contacto con agent. Cuando InvoiceResultData se mueva a billing,
-// solo cambia este archivo.
-export type { InvoiceResultData };
+// Forma de `data` en una respuesta completed de create_invoice o
+// register_payment. Todo monto es texto decimal y la cédula va enmascarada.
+export interface InvoiceResultData {
+  invoice_id: string;
+  customer: {
+    document_type: DocumentType;
+    document_number: string;
+    full_name: string;
+  };
+  items: Array<{
+    description: string;
+    quantity: number;
+    unit_price: string;
+    line_total: string;
+  }>;
+  subtotal: string;
+  tax_rate: string;
+  tax_amount: string;
+  total: string;
+  payment: {
+    method: PaymentMethod;
+    amount: string;
+    status: 'APPLIED';
+  } | null;
+  receipt: { receipt_number: number; issued_at: string } | null;
+}
 
 export class ResultCustomerDto {
     @ApiProperty({ enum: ['CC', 'NIT', 'CE'], example: 'CC' })

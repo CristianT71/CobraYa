@@ -1,8 +1,7 @@
 import type { InvoiceResultData } from '../dto/invoice-result.dto';
 
-// Lo que el controlador directo necesita de los casos de uso (Jheison).
-// Los comandos siguen la forma propuesta en el contrato con Cristian; cuando
-// Jheison suba los suyos, se reemplazan por sus tipos.
+// Lo que el controlador directo y el módulo agent necesitan de los casos de uso
+// de billing (application/). Los comandos son el contrato entre los módulos.
 
 export const CREATE_INVOICE_USE_CASE = Symbol('CREATE_INVOICE_USE_CASE');
 export const REGISTER_PAYMENT_USE_CASE = Symbol('REGISTER_PAYMENT_USE_CASE');
@@ -41,23 +40,4 @@ export interface RegisterPaymentUseCasePort {
 
 export interface GetReceiptUseCasePort {
     execute(query: GetReceiptQuery): Promise<InvoiceResultData>;
-}
-
-// Implementación provisional hasta que existan los casos de uso reales.
-// Permite arrancar la app; si alguien llama a la ruta, responde 500 claro.
-class NotIntegratedError extends Error {
-    readonly code = 'INTERNAL_ERROR';
-
-    constructor(piece: string) {
-        super(`${piece} todavía no está integrado en billing.`);
-        this.name = 'NotIntegratedError';
-    }
-}
-
-export function pendingUseCase<C>(piece: string): {
-    execute(command: C): Promise<InvoiceResultData>;
-} {
-    return {
-        execute: () => Promise.reject(new NotIntegratedError(piece)),
-    };
 }
