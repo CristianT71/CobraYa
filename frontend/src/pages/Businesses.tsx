@@ -61,7 +61,7 @@ const RESPONSE_EXAMPLE = pretty({
   status: 'completed',
   message: 'Cuenta de cobro creada y pagada en efectivo.',
   answer:
-    'Cuenta de cobro creada y pagada en efectivo. Cliente Cliente de ejemplo (****6789). Total $124.950 (subtotal $105.000 + impuesto $19.950). Pago en efectivo por $124.950. Comprobante N.º 1.',
+    'Cuenta de cobro creada y pagada en efectivo. Cliente Cliente de ejemplo (****6789). Total $124.950 (subtotal $105.000 + impuesto $19.950). Pago de $124.950 en efectivo. Comprobante N.º 1.',
   data: {
     invoice_id: 'b2f1c0de-0000-4000-8000-000000000001',
     customer: {

@@ -15,6 +15,7 @@ import { PartnerExchange } from '../../src/partners/partner-exchange.entity';
 import { PartnersService } from '../../src/partners/partners.service';
 import { PARTNER_SKILLS } from '../../src/partners/skills';
 import {
+  api,
   createTestApp,
   describeWithDb,
   resetDatabase,
@@ -256,6 +257,69 @@ describeWithDb('Canal de negocios A2A (e2e con PostgreSQL)', () => {
           idempotencyKey: null,
         },
       ).expect(200);
+    });
+  });
+
+  describe('campo answer', () => {
+    it('viene en todas las respuestas de /a2a/tasks, también en los errores', async () => {
+      await partners.update(idB, { skills: ['consultar_cuenta'] });
+      const responses = [
+        // 401: sin key.
+        await request(app.getHttpServer())
+          .post('/a2a/tasks')
+          .send({ message: 'x' })
+          .expect(401),
+        // 400: datos inválidos.
+        await task(keyA, {
+          skill: 'consultar_cuenta',
+          params: { invoice_id: 'abc' },
+        }).expect(400),
+        // 403: sin permiso.
+        await createAccount(keyB).expect(403),
+        // 200 rejected: cliente no registrado.
+        await createAccount(keyA).expect(200),
+        // 200 needs_clarification: sin clave de idempotencia.
+        await task(
+          keyA,
+          {
+            skill: 'registrar_pago',
+            params: { invoice_id: NO_UUID, method: 'cash' },
+          },
+          { idempotencyKey: null },
+        ).expect(200),
+      ];
+
+      for (const res of responses) {
+        expect(typeof res.body.answer).toBe('string');
+        expect(res.body.answer).toBe(res.body.message);
+      }
+    });
+
+    it('en un resultado exitoso el answer es más completo que el message', async () => {
+      await registerCustomer(keyA);
+
+      const res = await createAccount(keyA, {
+        payment: { method: 'transfer' },
+      }).expect(200);
+
+      expect(res.body.answer).toContain(res.body.message);
+      expect(res.body.answer).toContain('Pago de $124.950 por transferencia.');
+      expect(res.body.answer).not.toBe(res.body.message);
+    });
+
+    it('las respuestas de /agent y de /billing no cambian: no llevan answer', async () => {
+      extractor.respondWith(MOCK_EXTRACTIONS.completeInvoice);
+
+      const agentRes = await api(app as never)
+        .post('/agent/requests', nextKey())
+        .send({ text: 'Cóbrale a la cédula 1032456789 un filtro' })
+        .expect(200);
+      const billingRes = await api(app as never)
+        .get(`/billing/invoices/${NO_UUID}`)
+        .expect(404);
+
+      expect(agentRes.body).not.toHaveProperty('answer');
+      expect(billingRes.body).not.toHaveProperty('answer');
     });
   });
 

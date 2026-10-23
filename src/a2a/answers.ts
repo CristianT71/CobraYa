@@ -33,7 +33,7 @@ export function describeInvoice(
   );
   if (data.payment) {
     parts.push(
-      `Pago ${METHOD_LABELS[data.payment.method]} por ${formatCop(data.payment.amount)}.`,
+      `Pago de ${formatCop(data.payment.amount)} ${METHOD_LABELS[data.payment.method]}.`,
     );
   }
   if (data.receipt) {

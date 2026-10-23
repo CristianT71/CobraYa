@@ -29,6 +29,8 @@ interface Translated {
 }
 
 const AGENT_PATH = /^\/(agent|a2a)(\/|$)/;
+// Solo el canal de negocios agrega `answer` (texto listo para mostrar) a sus respuestas.
+const A2A_PATH = /^\/a2a(\/|$)/;
 
 const HTTP_TO_CODE: Partial<Record<number, ErrorCode>> = {
   [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
@@ -94,6 +96,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       missing_fields: t.missingFields,
       request_id: requestId,
     };
+    const payload = A2A_PATH.test(req.path)
+      ? { ...body, answer: body.message }
+      : body;
 
     const log = {
       request_id: requestId,
@@ -114,7 +119,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (res.headersSent) return;
     res.setHeader(REQUEST_ID_HEADER, requestId);
-    res.status(httpStatus).json(body);
+    res.status(httpStatus).json(payload);
   }
 
   private translate(exception: unknown): Translated {

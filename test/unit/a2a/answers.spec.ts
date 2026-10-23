@@ -56,7 +56,7 @@ describe('describeInvoice', () => {
       'Cuenta de cobro creada y pagada en efectivo. ' +
         'Cliente Cliente de ejemplo (****6789). ' +
         'Total $124.950 (subtotal $105.000 + impuesto $19.950). ' +
-        'Pago en efectivo por $124.950. ' +
+        'Pago de $124.950 en efectivo. ' +
         'Comprobante N.º 7. ' +
         'Cuenta b2f1c0de-0000-4000-8000-000000000001.',
     );
@@ -86,7 +86,7 @@ describe('describeInvoice', () => {
       payment: { method, amount: '124950.00', status: 'APPLIED' },
     });
 
-    expect(answer).toContain(`Pago ${label}`);
+    expect(answer).toContain(`Pago de $124.950 ${label}.`);
   });
 });
 
