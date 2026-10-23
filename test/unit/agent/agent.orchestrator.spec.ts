@@ -167,6 +167,24 @@ describe('AgentOrchestrator', () => {
       expectNoWrites(billing);
     });
 
+    it('si el texto no dice el precio de un ítem pide ese dato y no escribe nada', async () => {
+      const { orchestrator, billing } = setup({
+        ...MOCK_EXTRACTIONS.completeInvoice,
+        items: [
+          { description: 'Cambio de aceite', quantity: 1, unit_price: '' },
+        ],
+      });
+
+      const response = await orchestrator.handle(REQUEST);
+
+      expect(response).toMatchObject({
+        status: 'needs_clarification',
+        data: null,
+        missing_fields: ['items[0].unit_price'],
+      });
+      expectNoWrites(billing);
+    });
+
     it('con un monto mal normalizado pide corregirlo', async () => {
       const { orchestrator, billing } = setup({
         ...MOCK_EXTRACTIONS.completeInvoice,

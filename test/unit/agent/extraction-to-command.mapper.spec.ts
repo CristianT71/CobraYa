@@ -53,6 +53,18 @@ describe('checkExtraction', () => {
       expect(result.missing).toEqual(['customer.document_number', 'items']);
     });
 
+    it('un valor unitario vacío cuenta como dato faltante, no como inválido (prompt 1.1.0)', () => {
+      const result = checkExtraction(
+        extraction({
+          items: [{ description: 'Filtro', quantity: 1, unit_price: '' }],
+        }),
+      );
+      expect(result).toEqual({
+        missing: ['items[0].unit_price'],
+        invalid: [],
+      });
+    });
+
     it.each(['80.000', '80 mil', '80000.001', '-5', '1e5'])(
       'marca como inválido el valor unitario %s',
       (unitPrice) => {
