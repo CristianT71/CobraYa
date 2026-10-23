@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Headers,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
   Res,
@@ -29,6 +31,10 @@ import {
   ApiStandardErrors,
 } from '../common/swagger/api-docs.decorators';
 import { PARTNER_SKILLS, SKILL_DESCRIPTIONS } from '../partners/skills';
+import { ReceiptDocumentService } from '../receipts/receipt-document.service';
+import { ReceiptPdfService } from '../receipts/receipt-pdf.service';
+import { sendPdf } from '../receipts/send-pdf';
+import { SkillNotAllowedError } from './a2a.errors';
 import { PartnerAuthGuard, type PartnerRequest } from './partner-auth.guard';
 import { TasksService } from './tasks.service';
 
@@ -79,7 +85,11 @@ export class AgentCardController {
 @ApiTags('a2a')
 @Controller('a2a')
 export class A2aTasksController {
-  constructor(private readonly tasks: TasksService) {}
+  constructor(
+    private readonly tasks: TasksService,
+    private readonly documents: ReceiptDocumentService,
+    private readonly pdfs: ReceiptPdfService,
+  ) {}
 
   @Public()
   @UseGuards(PartnerAuthGuard)
@@ -140,5 +150,48 @@ export class A2aTasksController {
       requestId: resolveRequestId(req),
       idempotencyKey,
     });
+  }
+
+  @Public()
+  @UseGuards(PartnerAuthGuard)
+  @Get('receipts/:receipt_number/pdf')
+  @ApiBearerAuth('partner-key')
+  @ApiOperation({
+    summary:
+      'Descarga en PDF un comprobante emitido a un cliente de tu negocio',
+    description:
+      'Devuelve el comprobante listo para entregar a tu cliente, con un código QR que lleva a la verificación pública. ' +
+      'Requiere el permiso de la habilidad consultar_comprobante. Un comprobante de otro negocio responde igual que uno inexistente.',
+  })
+  @ApiStandardErrors()
+  @ApiResponse({
+    status: 200,
+    description: 'El comprobante en PDF',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'El negocio no tiene permiso para consultar comprobantes',
+    type: ErrorEnvelopeDto,
+  })
+  async receiptPdf(
+    @Param('receipt_number') rawNumber: string,
+    @Req() req: PartnerRequest,
+    @Res() res: Response,
+  ): Promise<void> {
+    if (!/^\d{1,10}$/.test(rawNumber) || Number(rawNumber) < 1) {
+      throw new BadRequestException(
+        'receipt_number debe ser un entero mayor que 0',
+      );
+    }
+    const receiptNumber = Number(rawNumber);
+    const partner = req.partner!;
+    if (!partner.skills.includes('consultar_comprobante')) {
+      throw new SkillNotAllowedError('consultar_comprobante');
+    }
+    const doc = await this.documents.forPartner(receiptNumber, partner.id);
+    sendPdf(res, await this.pdfs.render(doc), receiptNumber);
   }
 }

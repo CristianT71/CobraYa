@@ -1,13 +1,15 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RECEIPT, mockFetch, notFoundEnvelope } from '../test/helpers';
 import { VerifyReceipt } from './VerifyReceipt';
 
 async function fill(number: string, document: string) {
   const user = userEvent.setup();
-  if (number) await user.type(screen.getByLabelText('Número del comprobante'), number);
-  if (document) await user.type(screen.getByLabelText('Documento del cliente'), document);
+  if (number)
+    await user.type(screen.getByLabelText('Número del comprobante'), number);
+  if (document)
+    await user.type(screen.getByLabelText('Documento del cliente'), document);
   return user;
 }
 
@@ -19,7 +21,9 @@ describe('VerifyReceipt', () => {
     const user = await fill('', '');
     await user.click(screen.getByRole('button', { name: 'Verificar' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/número del comprobante/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /número del comprobante/i,
+    );
     expect(calls).toHaveLength(0);
   });
 
@@ -32,7 +36,9 @@ describe('VerifyReceipt', () => {
       const user = await fill(number, '1032456789');
       await user.click(screen.getByRole('button', { name: 'Verificar' }));
 
-      expect(await screen.findByRole('alert')).toHaveTextContent(/número del comprobante/i);
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /número del comprobante/i,
+      );
       expect(calls).toHaveLength(0);
     },
   );
@@ -44,7 +50,9 @@ describe('VerifyReceipt', () => {
     const user = await fill('7', '123');
     await user.click(screen.getByRole('button', { name: 'Verificar' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/documento del cliente/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /documento del cliente/i,
+    );
     expect(calls).toHaveLength(0);
   });
 
@@ -89,7 +97,10 @@ describe('VerifyReceipt', () => {
   });
 
   it('un comprobante inexistente o un documento equivocado muestran el mismo mensaje', async () => {
-    mockFetch(() => ({ status: 404, body: notFoundEnvelope('RECEIPT_NOT_FOUND') }));
+    mockFetch(() => ({
+      status: 404,
+      body: notFoundEnvelope('RECEIPT_NOT_FOUND'),
+    }));
     render(<VerifyReceipt />);
 
     const user = await fill('7', '999999999');
@@ -98,7 +109,9 @@ describe('VerifyReceipt', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'No encontramos un comprobante con esos datos',
     );
-    expect(screen.queryByText('Comprobante auténtico.')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Comprobante auténtico.'),
+    ).not.toBeInTheDocument();
   });
 
   it('con demasiadas consultas avisa cuánto esperar', async () => {
@@ -112,7 +125,9 @@ describe('VerifyReceipt', () => {
     const user = await fill('7', '1032456789');
     await user.click(screen.getByRole('button', { name: 'Verificar' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/demasiadas consultas.*15 min/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /demasiadas consultas.*15 min/i,
+    );
   });
 
   it('si el servicio no responde lo dice sin mostrar detalles técnicos', async () => {
@@ -128,7 +143,10 @@ describe('VerifyReceipt', () => {
   });
 
   it('un error 500 muestra un mensaje genérico', async () => {
-    mockFetch(() => ({ status: 500, body: { status: 'error', message: 'stack interno' } }));
+    mockFetch(() => ({
+      status: 500,
+      body: { status: 'error', message: 'stack interno' },
+    }));
     render(<VerifyReceipt />);
 
     const user = await fill('7', '1032456789');
@@ -152,7 +170,9 @@ describe('VerifyReceipt', () => {
     const user = await fill('7', '1032456789');
     await user.click(screen.getByRole('button', { name: 'Verificar' }));
 
-    expect(await screen.findByRole('button', { name: 'Verificando…' })).toBeDisabled();
+    expect(
+      await screen.findByRole('button', { name: 'Verificando…' }),
+    ).toBeDisabled();
     release?.();
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Verificar' })).toBeEnabled(),
@@ -177,5 +197,86 @@ describe('VerifyReceipt', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.queryByText('Comprobante N.º 7')).not.toBeInTheDocument();
+  });
+
+  describe('PDF del comprobante', () => {
+    afterEach(() => {
+      window.location.hash = '';
+      vi.restoreAllMocks();
+    });
+
+    it('rellena el número cuando se llega desde el código QR del PDF', () => {
+      window.location.hash = '#/comprobantes?numero=42';
+      mockFetch(() => ({ body: RECEIPT }));
+      render(<VerifyReceipt />);
+
+      expect(screen.getByLabelText('Número del comprobante')).toHaveValue('42');
+    });
+
+    it('ignora un número raro en el enlace', () => {
+      window.location.hash = '#/comprobantes?numero=<script>';
+      mockFetch(() => ({ body: RECEIPT }));
+      render(<VerifyReceipt />);
+
+      expect(screen.getByLabelText('Número del comprobante')).toHaveValue('');
+    });
+
+    it('descarga el PDF con el mismo número y documento ya verificados', async () => {
+      const created: Blob[] = [];
+      URL.createObjectURL = (blob: Blob | MediaSource) => {
+        created.push(blob as Blob);
+        return 'blob:comprobante';
+      };
+      URL.revokeObjectURL = () => undefined;
+      const clicked: string[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
+        function (this: HTMLAnchorElement) {
+          clicked.push(this.download);
+        },
+      );
+      const { calls } = mockFetch(() => ({ body: RECEIPT }));
+      render(<VerifyReceipt />);
+
+      const user = await fill('7', '1032456789');
+      await user.click(screen.getByRole('button', { name: 'Verificar' }));
+      await user.click(
+        await screen.findByRole('button', { name: 'Descargar PDF' }),
+      );
+
+      await waitFor(() => expect(clicked).toEqual(['comprobante-7.pdf']));
+      expect(calls[1]).toMatchObject({
+        url: '/public/receipts/pdf',
+        method: 'POST',
+        body: { receipt_number: 7, document_number: '1032456789' },
+      });
+      expect(created).toHaveLength(1);
+    });
+
+    it('si el PDF falla muestra el error y deja volver a intentar', async () => {
+      const { calls } = mockFetch((call) =>
+        call.url === '/public/receipts/pdf'
+          ? {
+              status: 429,
+              body: notFoundEnvelope('RATE_LIMITED'),
+              headers: { 'Retry-After': '60' },
+            }
+          : { body: RECEIPT },
+      );
+      render(<VerifyReceipt />);
+
+      const user = await fill('7', '1032456789');
+      await user.click(screen.getByRole('button', { name: 'Verificar' }));
+      await user.click(
+        await screen.findByRole('button', { name: 'Descargar PDF' }),
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /demasiadas consultas/i,
+      );
+      expect(calls).toHaveLength(2);
+      expect(
+        screen.getByRole('button', { name: 'Descargar PDF' }),
+      ).toBeEnabled();
+    });
   });
 });

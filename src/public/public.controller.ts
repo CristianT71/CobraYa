@@ -26,6 +26,9 @@ import {
   ErrorEnvelopeDto,
 } from '../common/swagger/api-docs.decorators';
 import { PARTNER_SKILLS, SKILL_DESCRIPTIONS } from '../partners/skills';
+import { ReceiptDocumentService } from '../receipts/receipt-document.service';
+import { ReceiptPdfService } from '../receipts/receipt-pdf.service';
+import { sendPdf } from '../receipts/send-pdf';
 import { PublicReceiptsService } from './public-receipts.service';
 import { VerifyReceiptDto } from './verify-receipt.dto';
 
@@ -46,6 +49,8 @@ export class PublicController {
   constructor(
     private readonly config: ConfigService,
     private readonly receipts: PublicReceiptsService,
+    private readonly documents: ReceiptDocumentService,
+    private readonly pdfs: ReceiptPdfService,
   ) {}
 
   @Public()
@@ -116,6 +121,68 @@ export class PublicController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const ip = this.checkLimits(req, res);
+
+    try {
+      return await this.receipts.verify(
+        dto.receipt_number,
+        dto.document_number,
+      );
+    } catch (error) {
+      if (error instanceof ReceiptNotFoundError) this.lockout.recordFailure(ip);
+      throw error;
+    }
+  }
+
+  @Public()
+  @Post('receipts/pdf')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Descarga el comprobante en PDF (con código QR de verificación)',
+    description:
+      'Mismos datos y mismos límites que la verificación: número del comprobante y documento del cliente. ' +
+      'Un número inexistente y un documento equivocado responden exactamente igual.',
+  })
+  @ApiStandardErrors()
+  @ApiResponse({
+    status: 200,
+    description: 'El comprobante en PDF',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No existe un comprobante con esos datos',
+    type: ErrorEnvelopeDto,
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Demasiadas consultas o intentos fallidos (con Retry-After)',
+    type: ErrorEnvelopeDto,
+  })
+  async receiptPdf(
+    @Body() dto: VerifyReceiptDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const ip = this.checkLimits(req, res);
+    let pdf: Buffer;
+    try {
+      const doc = await this.documents.forCustomer(
+        dto.receipt_number,
+        dto.document_number,
+      );
+      pdf = await this.pdfs.render(doc);
+    } catch (error) {
+      if (error instanceof ReceiptNotFoundError) this.lockout.recordFailure(ip);
+      throw error;
+    }
+    sendPdf(res, pdf, dto.receipt_number);
+  }
+
+  // Bloqueo por IP tras fallos y límite por minuto. Devuelve la IP para registrar fallos.
+  private checkLimits(req: Request, res: Response): string {
     const ip = req.ip ?? 'desconocida';
 
     const blockedMs = this.lockout.remainingMs(ip);
@@ -130,15 +197,6 @@ export class PublicController {
       res.setHeader('Retry-After', String(Math.ceil(hit.retryAfterMs / 1000)));
       throw new RateLimitedError();
     }
-
-    try {
-      return await this.receipts.verify(
-        dto.receipt_number,
-        dto.document_number,
-      );
-    } catch (error) {
-      if (error instanceof ReceiptNotFoundError) this.lockout.recordFailure(ip);
-      throw error;
-    }
+    return ip;
   }
 }

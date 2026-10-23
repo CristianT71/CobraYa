@@ -21,12 +21,45 @@ function errorMessage(error: unknown): string {
   return 'No pudimos verificar el comprobante. Intenta de nuevo en unos minutos.';
 }
 
+// El código QR del PDF lleva el número en el enlace (#/comprobantes?numero=12).
+function numberFromLink(): string {
+  const query = window.location.hash.split('?')[1] ?? '';
+  const value = new URLSearchParams(query).get('numero') ?? '';
+  return /^\d{1,10}$/.test(value) ? value : '';
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function VerifyReceipt() {
-  const [number, setNumber] = useState('');
+  const [number, setNumber] = useState(numberFromLink);
   const [documentNumber, setDocumentNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<PublicReceipt | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function download() {
+    if (!receipt) return;
+    setError(null);
+    setDownloading(true);
+    try {
+      const pdf = await api.receiptPdf(receipt.receipt_number, documentNumber);
+      saveBlob(pdf, `comprobante-${receipt.receipt_number}.pdf`);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -34,7 +67,11 @@ export function VerifyReceipt() {
     setReceipt(null);
 
     const parsed = Number(number);
-    if (!/^\d+$/.test(number.trim()) || !Number.isSafeInteger(parsed) || parsed < 1) {
+    if (
+      !/^\d+$/.test(number.trim()) ||
+      !Number.isSafeInteger(parsed) ||
+      parsed < 1
+    ) {
       setError('Escribe el número del comprobante (un entero mayor que 0).');
       return;
     }
@@ -85,7 +122,9 @@ export function VerifyReceipt() {
               value={documentNumber}
               onChange={(e) => setDocumentNumber(e.target.value)}
             />
-            <span className="hint">Solo dígitos; se aceptan puntos y espacios.</span>
+            <span className="hint">
+              Solo dígitos; se aceptan puntos y espacios.
+            </span>
           </div>
         </div>
         <div className="actions">
@@ -101,13 +140,27 @@ export function VerifyReceipt() {
             {error}
           </p>
         )}
-        {receipt && <ReceiptCard receipt={receipt} />}
+        {receipt && (
+          <ReceiptCard
+            receipt={receipt}
+            onDownload={download}
+            downloading={downloading}
+          />
+        )}
       </div>
     </section>
   );
 }
 
-function ReceiptCard({ receipt }: { receipt: PublicReceipt }) {
+function ReceiptCard({
+  receipt,
+  onDownload,
+  downloading,
+}: {
+  receipt: PublicReceipt;
+  onDownload: () => void;
+  downloading: boolean;
+}) {
   return (
     <article className="card receipt" aria-label="Comprobante verificado">
       <p className="alert alert-ok">Comprobante auténtico.</p>
@@ -155,6 +208,17 @@ function ReceiptCard({ receipt }: { receipt: PublicReceipt }) {
         <span>Subtotal {formatCop(receipt.subtotal)}</span>
         <span>Impuesto {formatCop(receipt.tax_amount)}</span>
         <strong>Total {formatCop(receipt.total)}</strong>
+      </div>
+
+      <div className="actions receipt-actions">
+        <button
+          className="btn"
+          type="button"
+          onClick={onDownload}
+          disabled={downloading}
+        >
+          {downloading ? 'Preparando el PDF…' : 'Descargar PDF'}
+        </button>
       </div>
     </article>
   );

@@ -172,6 +172,27 @@ export const api = {
       }),
     }),
 
+  // Descarga el comprobante en PDF: devuelve el archivo (Blob) o lanza ApiError.
+  receiptPdf: async (
+    receiptNumber: number,
+    documentNumber: string,
+  ): Promise<Blob> => {
+    let response: Response;
+    try {
+      response = await fetch('/public/receipts/pdf', {
+        method: 'POST',
+        ...json({
+          receipt_number: receiptNumber,
+          document_number: documentNumber,
+        }),
+      });
+    } catch {
+      throw new ApiError(0, 'NETWORK', 'No se pudo conectar con el servicio.');
+    }
+    if (!response.ok) throw toApiError(response, await readBody(response));
+    return response.blob();
+  },
+
   // Consola de pruebas: devuelve la respuesta tal cual (incluidos los errores) para
   // poder mostrarla. La key solo viaja en este encabezado y no se guarda.
   sendTask: async (
@@ -199,7 +220,10 @@ export const api = {
 
   admin: {
     listPartners: (operatorKey: string) =>
-      call<Partner[]>('/admin/partners', withHeaders({ 'X-API-Key': operatorKey })),
+      call<Partner[]>(
+        '/admin/partners',
+        withHeaders({ 'X-API-Key': operatorKey }),
+      ),
 
     createPartner: (
       operatorKey: string,
@@ -220,7 +244,10 @@ export const api = {
       operatorKey: string,
       id: string,
       patch: Partial<
-        Pick<Partner, 'name' | 'skills' | 'active' | 'rate_per_minute' | 'daily_quota'>
+        Pick<
+          Partner,
+          'name' | 'skills' | 'active' | 'rate_per_minute' | 'daily_quota'
+        >
       >,
     ) =>
       call<Partner>(`/admin/partners/${id}`, {

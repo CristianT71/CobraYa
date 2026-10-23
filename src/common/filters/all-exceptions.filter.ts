@@ -31,6 +31,9 @@ interface Translated {
 const AGENT_PATH = /^\/(agent|a2a)(\/|$)/;
 // Solo el canal de negocios agrega `answer` (texto listo para mostrar) a sus respuestas.
 const A2A_PATH = /^\/a2a(\/|$)/;
+// Las descargas de PDF usan códigos HTTP reales (404, 403...): quien descarga un
+// archivo no espera un JSON con 200 que diga «rejected».
+const DOWNLOAD_PATH = /\/pdf$/;
 
 const HTTP_TO_CODE: Partial<Record<number, ErrorCode>> = {
   [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
@@ -85,7 +88,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const isBusinessResult = 'business' in entry;
     const httpStatus =
       t.httpStatus ??
-      (isBusinessResult && AGENT_PATH.test(req.path) ? 200 : entry.httpStatus);
+      (isBusinessResult &&
+      AGENT_PATH.test(req.path) &&
+      !DOWNLOAD_PATH.test(req.path)
+        ? 200
+        : entry.httpStatus);
 
     const body: ResponseEnvelope<{ error_code: ErrorCode } | null> = {
       status: entry.status,

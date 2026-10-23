@@ -162,6 +162,20 @@ lo que se guarda lo decide y calcula el código. Un texto que intente cambiar la
 En lenguaje natural **el cliente debe estar ya registrado** en tu negocio (con
 `registrar_cliente`): nunca se crean clientes con datos que extrajo la IA.
 
+## 5.1 El comprobante en PDF
+
+Cuando una cuenta queda pagada tienes un número de comprobante. Con él puedes descargar el comprobante en PDF para entregárselo a tu cliente:
+
+```bash
+curl -o comprobante.pdf https://TU-SERVICIO/a2a/receipts/123/pdf   -H "Authorization: Bearer fac_TU_KEY"
+```
+
+- Necesita la key de tu negocio y el permiso de `consultar_comprobante`. Un comprobante de otro negocio responde 404, igual que uno que no existe.
+- Respuesta: `200` con `Content-Type: application/pdf` y `Content-Disposition: attachment`. Aquí los errores usan códigos HTTP reales (401, 403, 404, 429), no `200` con `status: "rejected"`.
+- El PDF lleva tu negocio como emisor, el cliente, los ítems, el subtotal, el impuesto, el total, el método de pago y un código QR que lleva a la verificación pública.
+- Es un **comprobante de pago**: no es factura electrónica de venta ni documento soporte tributario, y así lo dice el pie del documento.
+- Tu cliente también puede descargarlo solo, desde la página, con el número y su documento (`POST /public/receipts/pdf`, mismos límites que la verificación).
+
 ## 6. La respuesta
 
 Todas las respuestas traen el mismo envoltorio:

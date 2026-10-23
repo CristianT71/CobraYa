@@ -468,6 +468,7 @@ describeWithDb('Camino directo /billing/* (e2e con PostgreSQL)', () => {
       expect(Object.keys(document.paths).sort()).toEqual(
         [
           '/.well-known/agent.json',
+          '/a2a/receipts/{receipt_number}/pdf',
           '/a2a/tasks',
           '/admin/partners',
           '/admin/partners/{id}',
@@ -480,6 +481,7 @@ describeWithDb('Camino directo /billing/* (e2e con PostgreSQL)', () => {
           '/billing/receipts/{receiptNumber}',
           '/health',
           '/public/info',
+          '/public/receipts/pdf',
           '/public/receipts/verify',
         ].sort(),
       );
