@@ -6,6 +6,9 @@ import { join, relative } from 'node:path';
 //   - agent puede usar billing y customers; nunca al revés.
 //   - billing/domain es TypeScript puro: sin NestJS, TypeORM ni cliente del LLM.
 //   - Solo fireworks-extractor.adapter.ts conoce a Fireworks (SDK `openai`).
+//   - billing y customers no conocen a los negocios (partners) ni los canales que los
+//     usan (a2a, admin, public): reciben el ámbito como un identificador y nada más.
+//   - partners no depende de billing, customers ni agent.
 
 const SRC = join(__dirname, '../../src');
 
@@ -51,6 +54,12 @@ function violations(
 
 const pointsToAgent = (path: string) =>
   path.startsWith('.') && /(^|\/)agent(\/|$)/.test(path);
+
+const pointsTo =
+  (...modules: string[]) =>
+  (path: string) =>
+    path.startsWith('.') &&
+    new RegExp(`(^|/)(${modules.join('|')})(/|$)`).test(path);
 
 describe('Reglas de dependencia (contrato, sección 2.2)', () => {
   it('encuentra los archivos fuente', () => {
@@ -109,6 +118,41 @@ describe('Reglas de dependencia (contrato, sección 2.2)', () => {
       violations(
         (n) => n.startsWith('billing/') || n.startsWith('customers/'),
         (path) => /fireworks|llm/i.test(path),
+      ),
+    ).toEqual([]);
+  });
+  it('billing y customers no importan partners ni los canales de negocios (a2a, admin, public)', () => {
+    expect(
+      violations(
+        (n) => n.startsWith('billing/') || n.startsWith('customers/'),
+        pointsTo('partners', 'a2a', 'admin', 'public'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('partners no importa billing, customers, agent ni los canales', () => {
+    expect(
+      violations(
+        (n) => n.startsWith('partners/'),
+        pointsTo('billing', 'customers', 'agent', 'a2a', 'admin', 'public'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('agent no importa los canales de negocios (a2a, admin, public)', () => {
+    expect(
+      violations(
+        (n) => n.startsWith('agent/'),
+        pointsTo('a2a', 'admin', 'public'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('el canal a2a no conoce al proveedor del modelo', () => {
+    expect(
+      violations(
+        (n) => n.startsWith('a2a/'),
+        (path) => /fireworks|openai/i.test(path),
       ),
     ).toEqual([]);
   });
