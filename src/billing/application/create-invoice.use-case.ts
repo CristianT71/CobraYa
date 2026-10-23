@@ -19,12 +19,12 @@ import type {
   CreateInvoiceUseCasePort,
 } from '../ports/billing-use-cases.port';
 import {
+  isUniqueViolation,
   issueReceipt,
   loadInvoiceWithRelations,
   toResult,
 } from './invoice-persistence';
 
-const UNIQUE_VIOLATION_CODE = '23505';
 const IDEMPOTENCY_CONSTRAINT = 'uq_invoices_idempotency_key';
 
 // Crea una cuenta de cobro (contrato, secciones 7.6 y 8): valida y calcula con
@@ -56,7 +56,7 @@ export class CreateInvoiceUseCase implements CreateInvoiceUseCasePort {
         this.persist(manager, command, draft),
       );
     } catch (error) {
-      if (!isIdempotencyViolation(error)) throw error;
+      if (!isUniqueViolation(error, IDEMPOTENCY_CONSTRAINT)) throw error;
       // Carrera: otra petición con la misma clave se guardó primero.
       const winner = await this.findByKey(command.idempotencyKey);
       if (!winner) throw error;
@@ -178,18 +178,5 @@ function isSameRequest(
   return (
     command.payment.amount === null ||
     Money.of(command.payment.amount).equals(Money.of(payment.amount))
-  );
-}
-
-function isIdempotencyViolation(error: unknown): boolean {
-  const err = error as {
-    code?: string;
-    constraint?: string;
-    driverError?: { code?: string; constraint?: string };
-  };
-  const code = err?.driverError?.code ?? err?.code;
-  const constraint = err?.driverError?.constraint ?? err?.constraint;
-  return (
-    code === UNIQUE_VIOLATION_CODE && constraint === IDEMPOTENCY_CONSTRAINT
   );
 }

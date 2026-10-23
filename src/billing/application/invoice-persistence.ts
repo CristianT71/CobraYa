@@ -32,3 +32,17 @@ export async function issueReceipt(
 export function toResult(invoice: Invoice): InvoiceResultData {
   return toInvoiceResultData(invoice);
 }
+
+const UNIQUE_VIOLATION_CODE = '23505';
+
+// ¿El error es la violación de esta restricción UNIQUE de PostgreSQL?
+export function isUniqueViolation(error: unknown, constraint: string): boolean {
+  const err = error as {
+    code?: string;
+    constraint?: string;
+    driverError?: { code?: string; constraint?: string };
+  };
+  const code = err?.driverError?.code ?? err?.code;
+  const violated = err?.driverError?.constraint ?? err?.constraint;
+  return code === UNIQUE_VIOLATION_CODE && violated === constraint;
+}

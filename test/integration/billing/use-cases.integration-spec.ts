@@ -387,6 +387,110 @@ describeWithDb('Casos de uso de billing (PostgreSQL)', () => {
       ).rejects.toMatchObject({ code: 'INVOICE_NOT_FOUND' });
     });
 
+    describe('idempotencia del pago (sección 7.6)', () => {
+      const payCommand = (invoiceId: string, key: string) => ({
+        invoiceId,
+        method: 'card' as const,
+        amount: null,
+        idempotencyKey: key,
+      });
+
+      it('repetir el mismo pago devuelve el resultado original sin duplicar nada', async () => {
+        const pending = await pendingInvoice();
+        const key = nextKey();
+
+        const first = await pay.execute(payCommand(pending.invoice_id, key));
+        const repeated = await pay.execute(payCommand(pending.invoice_id, key));
+
+        expect(repeated).toEqual(first);
+        expect(await count(Payment)).toBe(1);
+        expect(await count(Receipt)).toBe(1);
+      });
+
+      it('con otro monto explícito igual al total sigue siendo el mismo pago', async () => {
+        const pending = await pendingInvoice();
+        const key = nextKey();
+        await pay.execute(payCommand(pending.invoice_id, key));
+
+        await expect(
+          pay.execute({
+            ...payCommand(pending.invoice_id, key),
+            amount: '124950.00',
+          }),
+        ).resolves.toBeDefined();
+        expect(await count(Payment)).toBe(1);
+      });
+
+      it('la misma clave con otro método responde 409', async () => {
+        const pending = await pendingInvoice();
+        const key = nextKey();
+        await pay.execute(payCommand(pending.invoice_id, key));
+
+        await expect(
+          pay.execute({
+            ...payCommand(pending.invoice_id, key),
+            method: 'cash',
+          }),
+        ).rejects.toBeInstanceOf(ConflictException);
+        expect(await count(Payment)).toBe(1);
+      });
+
+      it('la misma clave sobre otra cuenta responde 409 y no paga la segunda', async () => {
+        const first = await pendingInvoice();
+        const second = await pendingInvoice();
+        const key = nextKey();
+        await pay.execute(payCommand(first.invoice_id, key));
+
+        await expect(
+          pay.execute(payCommand(second.invoice_id, key)),
+        ).rejects.toBeInstanceOf(ConflictException);
+
+        expect(await count(Payment)).toBe(1);
+        const invoice = await dataSource
+          .getRepository(Invoice)
+          .findOneByOrFail({ id: second.invoice_id });
+        expect(invoice.status).toBe('PENDING');
+      });
+
+      it('dos pagos simultáneos con la misma clave: ambos responden igual y se aplica uno', async () => {
+        const pending = await pendingInvoice();
+        const key = nextKey();
+
+        const [a, b] = await Promise.all([
+          pay.execute(payCommand(pending.invoice_id, key)),
+          pay.execute(payCommand(pending.invoice_id, key)),
+        ]);
+
+        expect(a).toEqual(b);
+        expect(await count(Payment)).toBe(1);
+        expect(await count(Receipt)).toBe(1);
+      });
+
+      it('una clave distinta sobre la cuenta ya pagada sigue dando INVOICE_NOT_PAYABLE', async () => {
+        const pending = await pendingInvoice();
+        await pay.execute(payCommand(pending.invoice_id, nextKey()));
+
+        await expect(
+          pay.execute(payCommand(pending.invoice_id, nextKey())),
+        ).rejects.toMatchObject({ code: 'INVOICE_NOT_PAYABLE' });
+      });
+
+      it('un pago rechazado no consume la clave', async () => {
+        const pending = await pendingInvoice();
+        const key = nextKey();
+        await expect(
+          pay.execute({
+            ...payCommand(pending.invoice_id, key),
+            amount: '1.00',
+          }),
+        ).rejects.toMatchObject({ code: 'PAYMENT_MISMATCH' });
+
+        await expect(
+          pay.execute(payCommand(pending.invoice_id, key)),
+        ).resolves.toBeDefined();
+      });
+    });
+
     it('dos pagos simultáneos sobre la misma cuenta: solo uno se aplica (bloqueo FOR UPDATE)', async () => {
       const pending = await pendingInvoice();
       const attempt = () =>
