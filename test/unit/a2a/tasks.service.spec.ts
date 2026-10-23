@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { SkillNotAllowedError } from '../../../src/a2a/a2a.errors';
 import type { ExchangeAuditService } from '../../../src/a2a/exchange-audit.service';
+import { ReceiptLinkService } from '../../../src/receipts/receipt-link.service';
 import { TasksService } from '../../../src/a2a/tasks.service';
 import type { AgentOrchestrator } from '../../../src/agent/agent.orchestrator';
 import { AgentResponseDto } from '../../../src/agent/dto/agent-response.dto';
@@ -84,6 +85,10 @@ function setup() {
     pay,
     receipt,
     audit as unknown as ExchangeAuditService,
+    {
+      urlFor: (n: number) =>
+        `https://facturacion.test/public/receipts/token-${n}/pdf`,
+    } as unknown as ReceiptLinkService,
   );
   return {
     service,

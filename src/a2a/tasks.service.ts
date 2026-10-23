@@ -24,6 +24,7 @@ import { maskDocument } from '../common/utils/mask-document.util';
 import { CustomersService } from '../customers/customers.service';
 import type { Partner } from '../partners/partner.entity';
 import { isPartnerSkill, type PartnerSkill } from '../partners/skills';
+import { ReceiptLinkService } from '../receipts/receipt-link.service';
 import { SkillNotAllowedError } from './a2a.errors';
 import { describeInvoice, isInvoiceData } from './answers';
 import { ExchangeAuditService } from './exchange-audit.service';
@@ -70,6 +71,7 @@ export class TasksService {
     @Inject(GET_RECEIPT_USE_CASE)
     private readonly getReceipt: GetReceiptUseCasePort,
     private readonly audit: ExchangeAuditService,
+    private readonly receiptLinks: ReceiptLinkService,
   ) {}
 
   async handle(
@@ -95,10 +97,12 @@ export class TasksService {
         partner,
         context.idempotencyKey ?? task.idempotency_key,
       );
-      const response = await this.run(partner, chosen, task, {
-        requestId: context.requestId,
-        idempotencyKey,
-      });
+      const response = this.attachReceiptLink(
+        await this.run(partner, chosen, task, {
+          requestId: context.requestId,
+          idempotencyKey,
+        }),
+      );
 
       void this.audit.record({
         partnerId: partner.id,
@@ -125,6 +129,22 @@ export class TasksService {
       });
       throw error;
     }
+  }
+
+  // Toda respuesta completada con un comprobante lleva el enlace a su PDF, tanto en
+  // `data.receipt.pdf_url` como al final de `answer` (el chat del negocio solo muestra
+  // ese texto). Se calcula en cada respuesta, también en las repetidas por idempotencia,
+  // así que el enlace siempre llega vigente.
+  private attachReceiptLink(response: A2aResponse): A2aResponse {
+    if (response.status !== 'completed' || !isInvoiceData(response.data)) {
+      return response;
+    }
+    const receipt = response.data.receipt;
+    if (!receipt) return response;
+    const pdfUrl = this.receiptLinks.urlFor(receipt.receipt_number);
+    receipt.pdf_url = pdfUrl;
+    response.answer = `${response.answer} Comprobante en PDF: ${pdfUrl}`;
+    return response;
   }
 
   private async run(

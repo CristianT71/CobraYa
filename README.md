@@ -70,9 +70,9 @@ El negocio llama con su key: `POST /a2a/tasks` (la tarjeta pública está en `/.
 
 | Ruta | Quién | Para qué |
 |---|---|---|
-| `/a2a/tasks`, `/.well-known/agent.json` | Un negocio (su key `fac_…`), la tarjeta es pública | Pedir cobros, pagos y comprobantes |
+| `/a2a/tasks`, `/a2a/receipts/:n/pdf`, `/.well-known/agent.json` | Un negocio (su key `fac_…`), la tarjeta es pública | Pedir cobros, pagos y comprobantes; descargar el comprobante en PDF |
 | `/admin/partners/*` | El operador (`SERVICE_API_KEY`) | Registrar negocios, permisos, límites, rotar keys, intercambios |
-| `/public/info`, `/public/receipts/verify` | Público, con límites por IP | Portada y verificación de comprobantes (número + documento) |
+| `/public/info`, `/public/receipts/verify`, `/public/receipts/pdf`, `/public/receipts/:enlace/pdf` | Público, con límites por IP | Portada, verificación de comprobantes (número + documento) y PDF (con el documento, o con un enlace firmado de 7 días que viene en las respuestas del canal) |
 | `/agent/requests`, `/billing/*` | El operador (`SERVICE_API_KEY`) | Camino con IA y camino directo, ámbito de la plataforma |
 
 La página está en `frontend/` (React + Vite). Para desarrollarla con recarga automática: `npm run dev --prefix frontend` (reenvía la API al puerto 3000).

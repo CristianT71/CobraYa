@@ -2,13 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
+import { amountInWords } from './amount-in-words';
 import { formatCop, formatRate } from './format-cop';
 import type { ReceiptDocument } from './receipt-document';
 
 const INK = '#0f172a';
 const MUTED = '#64748b';
-const LINE = '#e2e8f0';
-const BRAND = '#4338ca';
+const LINE = '#dbe2ef';
+const BRAND = '#312e81';
+const BRAND_SOFT = '#eef2ff';
+const OK = '#166534';
+const OK_SOFT = '#ecfdf5';
 
 const METHODS: Record<string, string> = {
   cash: 'Efectivo',
@@ -18,12 +22,19 @@ const METHODS: Record<string, string> = {
 
 const DATE_FORMAT = new Intl.DateTimeFormat('es-CO', {
   dateStyle: 'long',
+  timeZone: 'America/Bogota',
+});
+const TIME_FORMAT = new Intl.DateTimeFormat('es-CO', {
   timeStyle: 'short',
   timeZone: 'America/Bogota',
 });
 
-// Dibuja el comprobante en PDF (A4). No inventa nada que no esté en la base: ni
-// CUFE ni resolución de la DIAN. El código QR lleva a la verificación pública.
+type Pdf = PDFKit.PDFDocument;
+
+// Dibuja el comprobante en PDF (A4) con la estructura de una factura: emisor, cliente,
+// ítems, totales, valor en letras y código QR de verificación. No inventa nada que no
+// esté en la base ni imita documentos oficiales: sin logo ni CUFE ni resolución de la
+// DIAN, y el pie dice que no es factura electrónica.
 @Injectable()
 export class ReceiptPdfService {
   constructor(private readonly config: ConfigService) {}
@@ -33,17 +44,18 @@ export class ReceiptPdfService {
     const verifyUrl = `${base}/#/comprobantes?numero=${doc.receiptNumber}`;
     const qr = await QRCode.toBuffer(verifyUrl, {
       margin: 1,
-      width: 220,
+      width: 240,
       errorCorrectionLevel: 'M',
     });
 
     return new Promise<Buffer>((resolve, reject) => {
       const pdf = new PDFDocument({
         size: 'A4',
-        margin: 48,
+        margin: 40,
         info: {
           Title: `Comprobante de pago N° ${doc.receiptNumber}`,
           Author: doc.issuerName,
+          Subject: 'Comprobante de pago',
         },
       });
       const chunks: Buffer[] = [];
@@ -57,7 +69,7 @@ export class ReceiptPdfService {
   }
 
   private draw(
-    pdf: PDFKit.PDFDocument,
+    pdf: Pdf,
     doc: ReceiptDocument,
     qr: Buffer,
     verifyUrl: string,
@@ -66,188 +78,288 @@ export class ReceiptPdfService {
     const right = pdf.page.width - pdf.page.margins.right;
     const width = right - left;
 
-    // Encabezado
-    pdf.rect(0, 0, pdf.page.width, 110).fill(BRAND);
-    pdf
-      .fillColor('#ffffff')
-      .font('Helvetica-Bold')
-      .fontSize(20)
-      .text(doc.issuerName, left, 38, { width: width * 0.6 });
-    pdf
-      .font('Helvetica')
-      .fontSize(10)
-      .fillColor('#c7d2fe')
-      .text('Comprobante de pago', left, 66);
-    pdf
-      .font('Helvetica-Bold')
-      .fontSize(11)
-      .fillColor('#ffffff')
-      .text('COMPROBANTE N°', left, 36, { width, align: 'right' });
-    pdf
-      .fontSize(24)
-      .text(String(doc.receiptNumber).padStart(6, '0'), left, 52, {
-        width,
-        align: 'right',
-      });
+    this.header(pdf, doc, left, width);
+    let y = this.parties(pdf, doc, left, width);
+    y = this.items(pdf, doc, left, right, width, y);
 
-    // Datos del comprobante y del cliente
-    let y = 140;
-    pdf.fillColor(MUTED).font('Helvetica').fontSize(9);
-    pdf.text('FECHA', left, y);
-    pdf.text('CLIENTE', left + width / 2, y);
-    pdf.fillColor(INK).fontSize(11);
-    pdf.text(DATE_FORMAT.format(doc.issuedAt), left, y + 14, {
-      width: width / 2 - 12,
-    });
-    pdf
-      .font('Helvetica-Bold')
-      .text(doc.customer.fullName, left + width / 2, y + 14, {
-        width: width / 2,
-      });
-    pdf
-      .font('Helvetica')
-      .fillColor(MUTED)
-      .text(
-        `${doc.customer.documentType} ${doc.customer.documentNumber}`,
-        left + width / 2,
-        y + 30,
-      );
-
-    // Tabla de ítems
-    y = 220;
-    const colQty = left + width * 0.5;
-    const colUnit = left + width * 0.62;
-    const colTotal = left + width * 0.82;
-    pdf.rect(left, y, width, 24).fill('#eef2ff');
-    pdf.fillColor(BRAND).font('Helvetica-Bold').fontSize(9);
-    pdf.text('DESCRIPCIÓN', left + 10, y + 8);
-    pdf.text('CANT.', colQty, y + 8, { width: width * 0.1, align: 'right' });
-    pdf.text('VALOR UNIT.', colUnit, y + 8, {
-      width: width * 0.18,
-      align: 'right',
-    });
-    pdf.text('TOTAL', colTotal, y + 8, {
-      width: width * 0.18 - 10,
-      align: 'right',
-    });
-
-    y += 24;
-    pdf.font('Helvetica').fontSize(10).fillColor(INK);
-    for (const item of doc.items) {
-      const height = Math.max(
-        24,
-        pdf.heightOfString(item.description, { width: width * 0.46 }) + 14,
-      );
-      if (y + height > pdf.page.height - 90) {
-        pdf.addPage();
-        y = pdf.page.margins.top;
-      }
-      pdf.fillColor(INK).text(item.description, left + 10, y + 7, {
-        width: width * 0.46,
-      });
-      pdf.text(String(item.quantity), colQty, y + 7, {
-        width: width * 0.1,
-        align: 'right',
-      });
-      pdf.text(formatCop(item.unitPrice), colUnit, y + 7, {
-        width: width * 0.18,
-        align: 'right',
-      });
-      pdf.text(formatCop(item.lineTotal), colTotal, y + 7, {
-        width: width * 0.18 - 10,
-        align: 'right',
-      });
-      y += height;
-      pdf
-        .moveTo(left, y)
-        .lineTo(right, y)
-        .strokeColor(LINE)
-        .lineWidth(1)
-        .stroke();
-    }
-
-    // Los totales y el bloque de verificación van en la misma página: si la tabla
-    // llegó muy abajo, pasan a una página nueva.
-    if (y > pdf.page.height - 280) {
+    // Los totales y la verificación van juntos: si la tabla llegó muy abajo,
+    // pasan a una página nueva.
+    if (y > pdf.page.height - 330) {
       pdf.addPage();
       y = pdf.page.margins.top;
     }
+    this.totals(pdf, doc, left, right, width, y + 16);
+    this.verification(pdf, qr, verifyUrl, left, right, width);
+  }
 
-    // Pago y totales: el recuadro de pago queda a la izquierda, los totales a la derecha.
-    y += 18;
-    const totalsTop = y;
-    const labelX = left + width * 0.55;
-    const valueW = right - labelX;
-    const row = (label: string, value: string, bold = false) => {
-      pdf
-        .font(bold ? 'Helvetica-Bold' : 'Helvetica')
-        .fontSize(bold ? 14 : 10)
-        .fillColor(bold ? INK : MUTED)
-        .text(label, labelX, y);
-      pdf
-        .fillColor(INK)
-        .text(value, labelX, y, { width: valueW, align: 'right' });
-      y += bold ? 26 : 18;
-    };
-    row('Subtotal', formatCop(doc.subtotal));
-    row(`Impuesto (${formatRate(doc.taxRate)})`, formatCop(doc.taxAmount));
+  private header(pdf: Pdf, doc: ReceiptDocument, left: number, width: number) {
+    pdf.rect(0, 0, pdf.page.width, 8).fill(BRAND);
+
     pdf
-      .moveTo(labelX, y)
-      .lineTo(right, y)
-      .strokeColor(INK)
-      .lineWidth(1)
-      .stroke();
-    y += 10;
-    row('TOTAL', formatCop(doc.total), true);
+      .fillColor(INK)
+      .font('Helvetica-Bold')
+      .fontSize(21)
+      .text(doc.issuerName, left, 34, { width: width * 0.58 });
+    pdf
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(MUTED)
+      .text('Comprobante emitido con Facturación y Pagos', left, 62, {
+        width: width * 0.58,
+      });
+
+    const boxW = width * 0.36;
+    const boxX = left + width - boxW;
+    pdf.roundedRect(boxX, 30, boxW, 62, 8).lineWidth(1.2).stroke(BRAND);
+    pdf
+      .fillColor(BRAND)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text('COMPROBANTE DE PAGO', boxX, 40, { width: boxW, align: 'center' });
+    pdf
+      .fontSize(24)
+      .text(`N° ${String(doc.receiptNumber).padStart(6, '0')}`, boxX, 56, {
+        width: boxW,
+        align: 'center',
+      });
+  }
+
+  // Dos fichas: datos del cliente y datos del comprobante. Devuelve la y siguiente.
+  private parties(
+    pdf: Pdf,
+    doc: ReceiptDocument,
+    left: number,
+    width: number,
+  ): number {
+    const top = 112;
+    const gap = 14;
+    const cardW = (width - gap) / 2;
+
+    const card = (
+      x: number,
+      title: string,
+      rows: Array<[string, string]>,
+    ): void => {
+      pdf.roundedRect(x, top, cardW, 96, 8).lineWidth(1).stroke(LINE);
+      pdf
+        .fillColor(BRAND)
+        .font('Helvetica-Bold')
+        .fontSize(8.5)
+        .text(title, x + 14, top + 12);
+      let ry = top + 30;
+      for (const [label, value] of rows) {
+        pdf
+          .fillColor(MUTED)
+          .font('Helvetica')
+          .fontSize(8.5)
+          .text(label, x + 14, ry, { width: 78 });
+        pdf
+          .fillColor(INK)
+          .font('Helvetica-Bold')
+          .fontSize(9.5)
+          .text(value, x + 94, ry - 1, { width: cardW - 108, ellipsis: true });
+        ry += 16;
+      }
+    };
+
+    const when = doc.issuedAt;
+    card(left, 'DATOS DEL CLIENTE', [
+      ['Nombre', doc.customer.fullName],
+      [
+        'Documento',
+        `${doc.customer.documentType} ${doc.customer.documentNumber}`,
+      ],
+    ]);
+    card(left + cardW + gap, 'DATOS DEL COMPROBANTE', [
+      ['Fecha', DATE_FORMAT.format(when)],
+      ['Hora', TIME_FORMAT.format(when)],
+      ['Cuenta', doc.accountRef],
+      ['Pedido', doc.externalRef ?? '—'],
+    ]);
+    return top + 96 + 22;
+  }
+
+  private items(
+    pdf: Pdf,
+    doc: ReceiptDocument,
+    left: number,
+    right: number,
+    width: number,
+    startY: number,
+  ): number {
+    const colIdx = left + 8;
+    const colDesc = left + 34;
+    const descW = width * 0.46;
+    const colQty = left + width * 0.55;
+    const colUnit = left + width * 0.64;
+    const colTotal = left + width * 0.82;
+    const numW = width * 0.18;
+
+    const head = (y: number): number => {
+      pdf.rect(left, y, width, 24).fill(BRAND);
+      pdf.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5);
+      pdf.text('#', colIdx, y + 8);
+      pdf.text('DESCRIPCIÓN', colDesc, y + 8);
+      pdf.text('CANT.', colQty, y + 8, { width: width * 0.08, align: 'right' });
+      pdf.text('VALOR UNITARIO', colUnit, y + 8, {
+        width: numW - 8,
+        align: 'right',
+      });
+      pdf.text('VALOR TOTAL', colTotal, y + 8, {
+        width: numW - 8,
+        align: 'right',
+      });
+      return y + 24;
+    };
+
+    let y = head(startY);
+    pdf.font('Helvetica').fontSize(9.5);
+    doc.items.forEach((item, index) => {
+      const height = Math.max(
+        26,
+        pdf.heightOfString(item.description, { width: descW }) + 16,
+      );
+      if (y + height > pdf.page.height - 90) {
+        pdf.addPage();
+        y = head(pdf.page.margins.top);
+      }
+      if (index % 2 === 1) pdf.rect(left, y, width, height).fill(BRAND_SOFT);
+      pdf.fillColor(MUTED).text(String(index + 1), colIdx, y + 8);
+      pdf.fillColor(INK).text(item.description, colDesc, y + 8, {
+        width: descW,
+      });
+      pdf.text(String(item.quantity), colQty, y + 8, {
+        width: width * 0.08,
+        align: 'right',
+      });
+      pdf.text(formatCop(item.unitPrice), colUnit, y + 8, {
+        width: numW - 8,
+        align: 'right',
+      });
+      pdf.text(formatCop(item.lineTotal), colTotal, y + 8, {
+        width: numW - 8,
+        align: 'right',
+      });
+      y += height;
+    });
+    pdf.moveTo(left, y).lineTo(right, y).lineWidth(1).stroke(LINE);
+    return y;
+  }
+
+  private totals(
+    pdf: Pdf,
+    doc: ReceiptDocument,
+    left: number,
+    right: number,
+    width: number,
+    top: number,
+  ): void {
+    // Izquierda: valor en letras y estado del pago.
+    const leftW = width * 0.5;
+    pdf.roundedRect(left, top, leftW, 66, 8).lineWidth(1).stroke(LINE);
+    pdf
+      .fillColor(BRAND)
+      .font('Helvetica-Bold')
+      .fontSize(8.5)
+      .text('VALOR EN LETRAS', left + 14, top + 11);
+    pdf
+      .fillColor(INK)
+      .font('Helvetica')
+      .fontSize(9)
+      .text(`SON: ${amountInWords(doc.total)}`, left + 14, top + 26, {
+        width: leftW - 28,
+      });
 
     if (doc.payment) {
-      pdf.roundedRect(left, totalsTop, width * 0.45, 58, 8).fill('#ecfdf5');
+      const payY = top + 76;
+      pdf.roundedRect(left, payY, leftW, 44, 8).fill(OK_SOFT);
       pdf
-        .fillColor('#166534')
+        .fillColor(OK)
         .font('Helvetica-Bold')
         .fontSize(11)
-        .text('PAGADA', left + 14, totalsTop + 12);
+        .text('PAGADO', left + 14, payY + 9);
       pdf
         .font('Helvetica')
-        .fontSize(10)
+        .fontSize(9)
         .text(
           `${METHODS[doc.payment.method] ?? doc.payment.method} · ${formatCop(doc.payment.amount)}`,
           left + 14,
-          totalsTop + 30,
+          payY + 25,
         );
     }
 
-    // Verificación y nota al pie
-    const footY = pdf.page.height - 190;
+    // Derecha: subtotal, impuesto y total.
+    const boxX = left + width * 0.56;
+    const boxW = right - boxX;
+    let y = top;
+    const row = (label: string, value: string) => {
+      pdf
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(9.5)
+        .text(label, boxX, y, { width: boxW * 0.6 });
+      pdf.fillColor(INK).text(value, boxX, y, { width: boxW, align: 'right' });
+      y += 20;
+    };
+    row('Subtotal', formatCop(doc.subtotal));
+    row(`Impuesto (${formatRate(doc.taxRate)})`, formatCop(doc.taxAmount));
+    pdf.roundedRect(boxX - 10, y, boxW + 10, 38, 8).fill(BRAND);
     pdf
-      .moveTo(left, footY)
-      .lineTo(right, footY)
-      .strokeColor(LINE)
-      .lineWidth(1)
-      .stroke();
-    pdf.image(qr, left, footY + 14, { width: 96 });
+      .fillColor('#ffffff')
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .text('TOTAL', boxX + 2, y + 13);
+    pdf.fontSize(16).text(formatCop(doc.total), boxX, y + 10, {
+      width: boxW - 12,
+      align: 'right',
+    });
+    y += 48;
+    if (doc.payment) {
+      pdf
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(9.5)
+        .text('Valor pagado', boxX, y, { width: boxW * 0.6 });
+      pdf.fillColor(INK).text(formatCop(doc.payment.amount), boxX, y, {
+        width: boxW,
+        align: 'right',
+      });
+    }
+  }
+
+  private verification(
+    pdf: Pdf,
+    qr: Buffer,
+    verifyUrl: string,
+    left: number,
+    right: number,
+    width: number,
+  ): void {
+    const footY = pdf.page.height - 190;
+    pdf.moveTo(left, footY).lineTo(right, footY).lineWidth(1).stroke(LINE);
+    pdf.image(qr, left, footY + 14, { width: 100 });
     pdf
       .fillColor(INK)
       .font('Helvetica-Bold')
       .fontSize(11)
-      .text('Verifica este comprobante', left + 112, footY + 20);
+      .text('Verifica este comprobante', left + 118, footY + 22);
     pdf
       .font('Helvetica')
       .fontSize(9)
       .fillColor(MUTED)
       .text(
-        'Escanea el código o entra al enlace e ingresa el número del comprobante y el documento del cliente.',
-        left + 112,
-        footY + 38,
-        { width: width - 112 },
+        'Escanea el código o entra al enlace e ingresa el número del comprobante y el documento del cliente. Así confirmas que es auténtico y que los valores coinciden.',
+        left + 118,
+        footY + 40,
+        { width: width - 118 },
       );
-    pdf.fillColor(BRAND).text(verifyUrl, left + 112, footY + 72, {
-      width: width - 112,
+    pdf.fillColor(BRAND).text(verifyUrl, left + 118, footY + 82, {
+      width: width - 118,
       link: verifyUrl,
     });
     pdf
       .fillColor(MUTED)
-      .fontSize(8)
+      .fontSize(7.5)
       .text(
         'Comprobante de pago emitido con Facturación y Pagos. No es una factura electrónica de venta ni un documento soporte tributario.',
         left,

@@ -15,7 +15,9 @@ const COMPLETED = {
 };
 
 // El servicio de pruebas responde la información pública y, para las tareas, lo que se le indique.
-function serve(task: (body: unknown) => { status?: number; body?: unknown } | Error) {
+function serve(
+  task: (body: unknown) => { status?: number; body?: unknown } | Error,
+) {
   return mockFetch((call) => {
     if (call.url === '/public/info') return { body: SERVICE_INFO };
     if (call.url === '/a2a/tasks') return task(call.body);
@@ -23,7 +25,8 @@ function serve(task: (body: unknown) => { status?: number; body?: unknown } | Er
   });
 }
 
-const textarea = () => screen.getByLabelText('Cuerpo de la tarea (JSON)') as HTMLTextAreaElement;
+const textarea = () =>
+  screen.getByLabelText('Cuerpo de la tarea (JSON)') as HTMLTextAreaElement;
 
 describe('Businesses: guía', () => {
   it('muestra las URLs reales del servicio en los ejemplos', async () => {
@@ -31,7 +34,8 @@ describe('Businesses: guía', () => {
     render(<Businesses />);
 
     expect(
-      (await screen.findAllByText(/facturacion\.example\.co\/a2a\/tasks/)).length,
+      (await screen.findAllByText(/facturacion\.example\.co\/a2a\/tasks/))
+        .length,
     ).toBeGreaterThan(0);
     expect(
       screen.getByRole('link', {
@@ -44,12 +48,45 @@ describe('Businesses: guía', () => {
     );
   });
 
+  it('explica cómo entregar el comprobante en PDF: enlace en la respuesta y descarga con la key', async () => {
+    serve(() => ({ body: COMPLETED }));
+    render(<Businesses />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'El comprobante en PDF' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/pdf_url/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Vale 7 días/)).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/\/a2a\/receipts\/1\/pdf/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('da buenas prácticas para integrarse: idempotencia, key en el servidor, límites', async () => {
+    serve(() => ({ body: COMPLETED }));
+    render(<Businesses />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Buenas prácticas' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Una Idempotency-Key por acción del cliente'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('La key va en tu servidor')).toBeInTheDocument();
+    expect(screen.getByText(/no hay CORS/)).toBeInTheDocument();
+    expect(screen.getByText(/90 segundos/)).toBeInTheDocument();
+  });
+
   it('si el servicio no responde usa la dirección actual en vez de dejar la guía vacía', async () => {
     mockFetch(() => new Error('offline'));
     render(<Businesses />);
 
     expect(
-      (await screen.findAllByText(new RegExp(`${window.location.origin}/a2a/tasks`))).length,
+      (
+        await screen.findAllByText(
+          new RegExp(`${window.location.origin}/a2a/tasks`),
+        )
+      ).length,
     ).toBeGreaterThan(0);
   });
 
@@ -61,7 +98,9 @@ describe('Businesses: guía', () => {
     for (const skill of SKILLS) {
       expect(table).toHaveTextContent(skill);
     }
-    expect(table).toHaveTextContent('document_type, document_number, full_name');
+    expect(table).toHaveTextContent(
+      'document_type, document_number, full_name',
+    );
   });
 
   it('explica los cuatro estados de la respuesta', async () => {
@@ -69,7 +108,12 @@ describe('Businesses: guía', () => {
     render(<Businesses />);
 
     const tables = await screen.findAllByRole('table');
-    for (const status of ['completed', 'needs_clarification', 'rejected', 'error']) {
+    for (const status of [
+      'completed',
+      'needs_clarification',
+      'rejected',
+      'error',
+    ]) {
       expect(tables[1]).toHaveTextContent(status);
     }
   });
@@ -90,7 +134,10 @@ describe('Businesses: consola de pruebas', () => {
     serve(() => ({ body: COMPLETED }));
     render(<Businesses />);
 
-    expect(screen.getByLabelText('Key de tu negocio')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Key de tu negocio')).toHaveAttribute(
+      'type',
+      'password',
+    );
   });
 
   it('empieza con el ejemplo del contrato y cambia el cuerpo al elegir otra habilidad', async () => {
@@ -98,9 +145,14 @@ describe('Businesses: consola de pruebas', () => {
     render(<Businesses />);
     const user = userEvent.setup();
 
-    expect(JSON.parse(textarea().value)).toEqual(EXAMPLES.lenguaje_natural.body);
+    expect(JSON.parse(textarea().value)).toEqual(
+      EXAMPLES.lenguaje_natural.body,
+    );
 
-    await user.selectOptions(screen.getByLabelText('Habilidad'), 'crear_cuenta');
+    await user.selectOptions(
+      screen.getByLabelText('Habilidad'),
+      'crear_cuenta',
+    );
 
     expect(JSON.parse(textarea().value)).toEqual(EXAMPLES.crear_cuenta.body);
   });
@@ -112,7 +164,9 @@ describe('Businesses: consola de pruebas', () => {
 
     await user.click(screen.getByRole('button', { name: 'Enviar tarea' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/key de tu negocio/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /key de tu negocio/i,
+    );
     expect(calls.filter((c) => c.url === '/a2a/tasks')).toHaveLength(0);
   });
 
@@ -122,10 +176,14 @@ describe('Businesses: consola de pruebas', () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText('Key de tu negocio'), 'fac_clave');
-    fireEvent.change(textarea(), { target: { value: '{ "message": "falta cerrar' } });
+    fireEvent.change(textarea(), {
+      target: { value: '{ "message": "falta cerrar' },
+    });
     await user.click(screen.getByRole('button', { name: 'Enviar tarea' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/no es un JSON válido/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /no es un JSON válido/i,
+    );
     expect(textarea()).toHaveAttribute('aria-invalid', 'true');
     expect(calls.filter((c) => c.url === '/a2a/tasks')).toHaveLength(0);
   });
@@ -136,11 +194,14 @@ describe('Businesses: consola de pruebas', () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText('Key de tu negocio'), 'fac_clave');
-    const idem = (screen.getByLabelText('Idempotency-Key') as HTMLInputElement).value;
+    const idem = (screen.getByLabelText('Idempotency-Key') as HTMLInputElement)
+      .value;
     await user.click(screen.getByRole('button', { name: 'Enviar tarea' }));
 
     expect(await screen.findByText('HTTP 200')).toHaveClass('badge-ok');
-    expect(screen.getByText(COMPLETED.answer, { selector: 'p' })).toBeInTheDocument();
+    expect(
+      screen.getByText(COMPLETED.answer, { selector: 'p' }),
+    ).toBeInTheDocument();
     const sent = calls.find((c) => c.url === '/a2a/tasks');
     expect(sent).toMatchObject({
       method: 'POST',
@@ -188,7 +249,9 @@ describe('Businesses: consola de pruebas', () => {
     await screen.findByText('HTTP 200');
     await user.click(screen.getByRole('button', { name: 'Enviar tarea' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo conectar');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudo conectar',
+    );
     expect(screen.queryByText('HTTP 200')).not.toBeInTheDocument();
   });
 
@@ -219,9 +282,15 @@ describe('Businesses: consola de pruebas', () => {
 
     await user.click(screen.getByRole('button', { name: 'Enviar tarea' }));
 
-    expect(await screen.findByRole('button', { name: 'Enviando…' })).toBeDisabled();
+    expect(
+      await screen.findByRole('button', { name: 'Enviando…' }),
+    ).toBeDisabled();
     release?.();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar tarea' })).toBeEnabled());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Enviar tarea' }),
+      ).toBeEnabled(),
+    );
   });
 
   it('la key no se guarda en el navegador ni se incluye en la página', async () => {
@@ -229,12 +298,19 @@ describe('Businesses: consola de pruebas', () => {
     render(<Businesses />);
     const user = userEvent.setup();
 
-    await user.type(screen.getByLabelText('Key de tu negocio'), 'fac_clave_secreta_123');
+    await user.type(
+      screen.getByLabelText('Key de tu negocio'),
+      'fac_clave_secreta_123',
+    );
     await user.click(screen.getByRole('button', { name: 'Enviar tarea' }));
     await screen.findByText('HTTP 200');
 
-    expect(JSON.stringify({ ...window.localStorage })).not.toContain('clave_secreta');
-    expect(JSON.stringify({ ...window.sessionStorage })).not.toContain('clave_secreta');
+    expect(JSON.stringify({ ...window.localStorage })).not.toContain(
+      'clave_secreta',
+    );
+    expect(JSON.stringify({ ...window.sessionStorage })).not.toContain(
+      'clave_secreta',
+    );
     expect(document.body.textContent).not.toContain('clave_secreta');
   });
 });

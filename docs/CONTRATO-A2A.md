@@ -164,17 +164,34 @@ En lenguaje natural **el cliente debe estar ya registrado** en tu negocio (con
 
 ## 5.1 El comprobante en PDF
 
-Cuando una cuenta queda pagada tienes un número de comprobante. Con él puedes descargar el comprobante en PDF para entregárselo a tu cliente:
+Cada cuenta pagada tiene un comprobante con su número. Hay dos formas de entregárselo a tu cliente.
 
-```bash
-curl -o comprobante.pdf https://TU-SERVICIO/a2a/receipts/123/pdf   -H "Authorization: Bearer fac_TU_KEY"
+**1. Con el enlace que ya viene en la respuesta (la más simple, sirve para chats).** Toda respuesta `completed` que tenga comprobante (crear cuenta con pago, registrar pago, consultar comprobante) trae el enlace dos veces: en `data.receipt.pdf_url` y al final del texto `answer`. Si tu chat muestra `answer`, tu cliente recibe el enlace sin que programes nada más:
+
+```json
+"answer": "Cuenta de cobro creada y pagada en efectivo. … Comprobante N.º 12. Comprobante en PDF: https://TU-SERVICIO/public/receipts/MTIuMTc5…firma/pdf"
 ```
 
-- Necesita la key de tu negocio y el permiso de `consultar_comprobante`. Un comprobante de otro negocio responde 404, igual que uno que no existe.
+- Abre el PDF **sin key**: la firma del enlace demuestra que lo emitimos nosotros.
+- **Vale 7 días.** Pasado ese tiempo responde 404; vuelve a pedir el comprobante con `consultar_comprobante` y recibirás un enlace nuevo.
+- Es personal: quien tenga el enlace puede ver ese comprobante (con el nombre y el documento del cliente). Mándalo solo a tu cliente.
+- Un enlace alterado, vencido o inventado responde siempre igual (404), y tras varios intentos fallidos la IP queda bloqueada un rato.
+
+**2. Descargándolo con tu key (para tu servidor).**
+
+```bash
+curl -o comprobante.pdf https://TU-SERVICIO/a2a/receipts/123/pdf \
+  -H "Authorization: Bearer fac_TU_KEY"
+```
+
+- Necesita el permiso de `consultar_comprobante`. Un comprobante de otro negocio responde 404, igual que uno que no existe.
 - Respuesta: `200` con `Content-Type: application/pdf` y `Content-Disposition: attachment`. Aquí los errores usan códigos HTTP reales (401, 403, 404, 429), no `200` con `status: "rejected"`.
-- El PDF lleva tu negocio como emisor, el cliente, los ítems, el subtotal, el impuesto, el total, el método de pago y un código QR que lleva a la verificación pública.
-- Es un **comprobante de pago**: no es factura electrónica de venta ni documento soporte tributario, y así lo dice el pie del documento.
-- Tu cliente también puede descargarlo solo, desde la página, con el número y su documento (`POST /public/receipts/pdf`, mismos límites que la verificación).
+
+**Qué lleva el PDF:** tu negocio como emisor, número de comprobante, fecha y hora, el cliente y su documento, la referencia de la cuenta y tu pedido (`external_ref`), los ítems, subtotal, impuesto, total en números y en letras, el método de pago y un código QR que lleva a la verificación pública.
+
+Es un **comprobante de pago**: no es factura electrónica de venta ni documento soporte tributario, y así lo dice el pie del documento.
+
+Tu cliente también puede descargarlo solo, desde la página, con el número y su documento (`POST /public/receipts/pdf`, mismos límites que la verificación).
 
 ## 6. La respuesta
 
@@ -290,7 +307,8 @@ Tres cosas que conviene saber:
    desarrollo, listar `IP:puerto` en `A2A_DEV_ALLOWED_TARGETS`).
 2. **Estados de fallo**: el lector de respuestas de AutoMax trata `rejected` y `error` como una
    falla remota; en esos casos su chat puede mostrar su propio aviso genérico en vez de nuestro
-   `answer`. Con `completed` y `needs_clarification` muestra nuestro texto.
+   `answer`. Con `completed` y `needs_clarification` muestra nuestro texto. Como el cobro completado termina con el
+   enlace al comprobante en PDF (sección 5.1), el cliente lo recibe en el mismo chat.
 3. **Consultas sí, cobros no (todavía)**: hoy AutoMax solo envía `{ "from", "message" }`, sin clave de
    idempotencia. Consultar un comprobante o una cuenta funciona; **crear o pagar** responde
    `needs_clarification` pidiendo la `Idempotency-Key`. Para cobrar desde su sistema basta con

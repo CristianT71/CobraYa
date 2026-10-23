@@ -32,6 +32,14 @@ export class ReceiptDocumentService {
     );
   }
 
+  /**
+   * Para quien trae un enlace firmado y vigente (ver ReceiptLinkService): la firma ya
+   * demuestra que lo emitimos nosotros, así que no se pide nada más.
+   */
+  forSignedLink(receiptNumber: number): Promise<ReceiptDocument> {
+    return this.load(receiptNumber, () => true);
+  }
+
   /** Para quien presenta el documento del cliente (verificación pública). */
   forCustomer(
     receiptNumber: number,
@@ -66,6 +74,8 @@ export class ReceiptDocumentService {
 
     return {
       receiptNumber: receipt.receiptNumber,
+      accountRef: invoice.id.slice(0, 8).toUpperCase(),
+      externalRef: invoice.externalRef,
       issuedAt: receipt.issuedAt,
       issuerName: partner?.name ?? PLATFORM_NAME,
       customer: {

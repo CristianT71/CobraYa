@@ -483,6 +483,7 @@ describeWithDb('Camino directo /billing/* (e2e con PostgreSQL)', () => {
           '/public/info',
           '/public/receipts/pdf',
           '/public/receipts/verify',
+          '/public/receipts/{token}/pdf',
         ].sort(),
       );
       expect(document.paths['/agent/requests']).toHaveProperty('post');

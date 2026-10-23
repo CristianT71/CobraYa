@@ -3,6 +3,10 @@ import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { PartnersService } from '../../src/partners/partners.service';
 import {
+  RECEIPT_LINK_TTL_SECONDS,
+  ReceiptLinkService,
+} from '../../src/receipts/receipt-link.service';
+import {
   createTestApp,
   describeWithDb,
   resetDatabase,
@@ -212,6 +216,172 @@ describeWithDb('Comprobante en PDF (e2e con PostgreSQL)', () => {
         .post('/public/receipts/pdf')
         .send({ receipt_number: 1 })
         .expect(400);
+    });
+  });
+
+  describe('enlace firmado al PDF (para el chat del negocio)', () => {
+    const pathOf = (url: string) => new URL(url).pathname;
+
+    const createPaid = async (key: string, idem?: string) => {
+      await a2a(keyA, {
+        skill: 'registrar_cliente',
+        params: {
+          document_type: 'CC',
+          document_number: DOC,
+          full_name: 'Ana Pérez',
+        },
+      });
+      return request(app.getHttpServer())
+        .post('/a2a/tasks')
+        .set('Authorization', `Bearer ${keyA}`)
+        .set('Idempotency-Key', idem ?? key)
+        .send({
+          skill: 'crear_cuenta',
+          params: {
+            customer: { document_type: 'CC', document_number: DOC },
+            items: [
+              {
+                description: 'Cambio de aceite',
+                quantity: 1,
+                unit_price: '80000.00',
+              },
+            ],
+            payment: { method: 'cash' },
+          },
+        })
+        .expect(200);
+    };
+
+    it('crear una cuenta pagada devuelve el enlace en data.receipt.pdf_url y al final de answer', async () => {
+      const res = await createPaid(nextKey());
+
+      const url = res.body.data.receipt.pdf_url as string;
+      expect(url).toMatch(/\/public\/receipts\/[\w-]+\.[\w-]+\/pdf$/);
+      expect(res.body.answer).toMatch(/ Comprobante en PDF: \S+\/pdf$/);
+      expect(res.body.answer.endsWith(url)).toBe(true);
+    });
+
+    it('el enlace abre el PDF sin key y sin ningún otro dato', async () => {
+      const res = await createPaid(nextKey());
+      const path = pathOf(res.body.data.receipt.pdf_url);
+
+      const pdf = await request(app.getHttpServer())
+        .get(path)
+        .buffer(true)
+        .parse(binary as never)
+        .expect(200);
+
+      expect(pdf.headers['content-type']).toBe('application/pdf');
+      expect(isPdf(pdf as unknown as Binary)).toBe(true);
+    });
+
+    it('repetir la petición con la misma Idempotency-Key también trae el enlace', async () => {
+      const key = nextKey();
+      const first = await createPaid(key);
+      const replay = await createPaid(key);
+
+      expect(replay.body.data.invoice_id).toBe(first.body.data.invoice_id);
+      expect(replay.body.data.receipt.pdf_url).toMatch(/\/pdf$/);
+      expect(replay.body.answer).toContain('Comprobante en PDF: ');
+    });
+
+    it('una cuenta pendiente (sin comprobante) no lleva enlace', async () => {
+      await a2a(keyA, {
+        skill: 'registrar_cliente',
+        params: {
+          document_type: 'CC',
+          document_number: DOC,
+          full_name: 'Ana Pérez',
+        },
+      });
+      const res = await a2a(keyA, {
+        skill: 'crear_cuenta',
+        params: {
+          customer: { document_type: 'CC', document_number: DOC },
+          items: [
+            { description: 'Filtro', quantity: 1, unit_price: '25000.00' },
+          ],
+        },
+      }).expect(200);
+
+      expect(res.body.data.receipt).toBeNull();
+      expect(res.body.answer).not.toContain('PDF');
+    });
+
+    it('registrar el pago de una cuenta pendiente trae el enlace', async () => {
+      await a2a(keyA, {
+        skill: 'registrar_cliente',
+        params: {
+          document_type: 'CC',
+          document_number: DOC,
+          full_name: 'Ana Pérez',
+        },
+      });
+      const pending = await a2a(keyA, {
+        skill: 'crear_cuenta',
+        params: {
+          customer: { document_type: 'CC', document_number: DOC },
+          items: [
+            { description: 'Filtro', quantity: 1, unit_price: '25000.00' },
+          ],
+        },
+      }).expect(200);
+
+      const paid = await a2a(keyA, {
+        skill: 'registrar_pago',
+        params: {
+          invoice_id: pending.body.data.invoice_id,
+          method: 'transfer',
+        },
+      }).expect(200);
+
+      expect(paid.body.data.receipt.pdf_url).toMatch(/\/pdf$/);
+      expect(paid.body.answer).toContain('Comprobante en PDF: ');
+    });
+
+    it('consultar el comprobante también trae el enlace', async () => {
+      const number = await receiptOfA();
+
+      const res = await a2a(keyA, {
+        skill: 'consultar_comprobante',
+        params: { receipt_number: number },
+      }).expect(200);
+
+      expect(res.body.data.receipt.pdf_url).toMatch(/\/pdf$/);
+    });
+
+    it('un enlace alterado, uno inventado y un número inexistente responden exactamente igual', async () => {
+      const res = await createPaid(nextKey());
+      const path = pathOf(res.body.data.receipt.pdf_url);
+      const [payload, signature] = path.split('/')[3].split('.');
+
+      const tampered = await request(app.getHttpServer())
+        .get(`/public/receipts/${payload}.${signature.slice(0, -2)}AA/pdf`)
+        .expect(404);
+      const invented = await request(app.getHttpServer())
+        .get('/public/receipts/abc.def/pdf')
+        .expect(404);
+      const garbage = await request(app.getHttpServer())
+        .get('/public/receipts/%3Cscript%3E/pdf')
+        .expect(404);
+
+      const strip = (body: Record<string, unknown>) => ({
+        ...body,
+        request_id: undefined,
+      });
+      expect(strip(tampered.body)).toEqual(strip(invented.body));
+      expect(strip(garbage.body)).toEqual(strip(invented.body));
+      expect(tampered.body.data.error_code).toBe('RECEIPT_NOT_FOUND');
+    });
+
+    it('un enlace vencido responde 404 y no abre el PDF', async () => {
+      const number = await receiptOfA();
+      const old = Date.now() - (RECEIPT_LINK_TTL_SECONDS + 60) * 1000;
+      const token = app.get(ReceiptLinkService).issue(number, old);
+
+      await request(app.getHttpServer())
+        .get(`/public/receipts/${token}/pdf`)
+        .expect(404);
     });
   });
 });

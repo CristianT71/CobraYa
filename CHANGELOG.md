@@ -22,7 +22,7 @@ para ellos en [`docs/CONTRATO-A2A.md`](docs/CONTRATO-A2A.md).
   `POST /a2a/tasks` (key del negocio), `GET|POST|PATCH /admin/partners…` (solo el operador),
   `GET /public/info` y `POST /public/receipts/verify` (públicas, con límites), y la página web en `/`.
   Las rutas públicas (`@Public`) ya no son solo `/health`; cada una tiene su propia protección.
-- **Comprobante en PDF:** `GET /a2a/receipts/:número/pdf` (key del negocio, permiso `consultar_comprobante`) y `POST /public/receipts/pdf` (número y documento del cliente, mismos límites que la verificación). Las descargas responden con códigos HTTP reales. El PDF lleva un código QR a la verificación pública.
+- **Comprobante en PDF:** `GET /a2a/receipts/:número/pdf` (key del negocio, permiso `consultar_comprobante`), `POST /public/receipts/pdf` (número y documento del cliente) y `GET /public/receipts/:enlace/pdf` (enlace firmado de 7 días, sin key). Las descargas responden con códigos HTTP reales. **Campo nuevo** `data.receipt.pdf_url` (compatible) en crear cuenta con pago, registrar pago y consultar comprobante, repetido al final de `answer` para que el chat del negocio lo muestre. El PDF lleva un código QR a la verificación pública.
 - **Habilidades** (`/a2a/tasks`): `registrar_cliente`, `crear_cuenta`, `registrar_pago`,
   `consultar_cuenta`, `consultar_comprobante` y `lenguaje_natural`, con el formato `{from, message}`
   del concesionario o `{skill, params}`. El operador puede limitar las habilidades de cada negocio.

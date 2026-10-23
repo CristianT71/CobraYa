@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
   Res,
@@ -27,6 +28,7 @@ import {
 } from '../common/swagger/api-docs.decorators';
 import { PARTNER_SKILLS, SKILL_DESCRIPTIONS } from '../partners/skills';
 import { ReceiptDocumentService } from '../receipts/receipt-document.service';
+import { ReceiptLinkService } from '../receipts/receipt-link.service';
 import { ReceiptPdfService } from '../receipts/receipt-pdf.service';
 import { sendPdf } from '../receipts/send-pdf';
 import { PublicReceiptsService } from './public-receipts.service';
@@ -51,6 +53,7 @@ export class PublicController {
     private readonly receipts: PublicReceiptsService,
     private readonly documents: ReceiptDocumentService,
     private readonly pdfs: ReceiptPdfService,
+    private readonly links: ReceiptLinkService,
   ) {}
 
   @Public()
@@ -179,6 +182,50 @@ export class PublicController {
       throw error;
     }
     sendPdf(res, pdf, dto.receipt_number);
+  }
+
+  @Public()
+  @Get('receipts/:token/pdf')
+  @ApiOperation({
+    summary: 'Descarga el comprobante en PDF desde un enlace firmado',
+    description:
+      'El enlace (`pdf_url`) viene en las respuestas de crear cuenta, registrar pago y consultar comprobante. ' +
+      'No necesita key: la firma demuestra que lo emitió este servicio, y caduca a los 7 días. ' +
+      'Un enlace alterado, vencido o de un comprobante inexistente responde exactamente igual (404).',
+  })
+  @ApiStandardErrors()
+  @ApiResponse({
+    status: 200,
+    description: 'El comprobante en PDF',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Enlace inválido, vencido o comprobante inexistente',
+    type: ErrorEnvelopeDto,
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Demasiadas consultas o intentos fallidos (con Retry-After)',
+    type: ErrorEnvelopeDto,
+  })
+  async receiptPdfByLink(
+    @Param('token') token: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const ip = this.checkLimits(req, res);
+    const receiptNumber = this.links.verify(token);
+    if (receiptNumber === null) {
+      this.lockout.recordFailure(ip);
+      throw new ReceiptNotFoundError('No encontramos ese comprobante.');
+    }
+    const pdf = await this.pdfs.render(
+      await this.documents.forSignedLink(receiptNumber),
+    );
+    sendPdf(res, pdf, receiptNumber);
   }
 
   // Bloqueo por IP tras fallos y límite por minuto. Devuelve la IP para registrar fallos.

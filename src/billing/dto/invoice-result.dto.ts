@@ -26,7 +26,12 @@ export interface InvoiceResultData {
     amount: string;
     status: 'APPLIED';
   } | null;
-  receipt: { receipt_number: number; issued_at: string } | null;
+  receipt: {
+    receipt_number: number;
+    issued_at: string;
+    // Lo agrega el canal de negocios (A2A): enlace firmado al PDF, vigente 7 días.
+    pdf_url?: string;
+  } | null;
 }
 
 export class ResultCustomerDto {
@@ -68,6 +73,15 @@ export class ResultPaymentDto {
 export class ResultReceiptDto {
   @ApiProperty({ example: 1 })
   receipt_number: number;
+
+  @ApiProperty({
+    required: false,
+    example:
+      'https://agente-facturacion.onrender.com/public/receipts/MS4xNzk…/pdf',
+    description:
+      'Solo en el canal de negocios (/a2a): enlace firmado al PDF del comprobante, sin key y vigente por 7 días.',
+  })
+  pdf_url?: string;
 
   @ApiProperty({ example: '2026-10-21T21:50:00.000Z' })
   issued_at: string;
