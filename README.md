@@ -154,3 +154,11 @@ docs/           CONTRATO-A2A.md: contrato para los otros negocios
 ## Trabajo en equipo
 
 Una rama por persona (`DevAlejo`, `DevCristian`, `DevJheison`, `DevZaidy`); nada entra a `main` sin pull request revisado. Las interfaces compartidas y el contrato solo cambian por acuerdo del grupo (sección 12.4).
+
+## Despliegue (Render, Railway o cualquier plataforma con Docker)
+
+El `Dockerfile` compila el servicio y la página, aplica las migraciones pendientes al arrancar y levanta `node dist/main`.
+
+Variables de entorno: `DATABASE_URL` (Postgres; en bases externas añade `?sslmode=require`), `SERVICE_API_KEY`, `PARTNER_KEY_PEPPER` (≥32 caracteres, no la cambies después o las keys dejan de valer), `FIREWORKS_API_KEY`, `FIREWORKS_BASE_URL`, `FIREWORKS_MODEL`, `A2A_PUBLIC_BASE_URL` (la URL https pública, sin barra final) y `TRUST_PROXY=1` (hay un proxy delante; sin esto el bloqueo por IP vería una sola IP para todos).
+
+Los límites por minuto y por día viven en la memoria del proceso: usa **una sola instancia**.

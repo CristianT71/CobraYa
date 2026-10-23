@@ -4,6 +4,8 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export interface AppConfig {
   port: number;
+  /** Proxies delante del servicio; 0 = no confiar en X-Forwarded-For. */
+  trustProxy: number;
   database: { url: string };
   security: { serviceApiKey: string };
   llm: {
@@ -48,6 +50,7 @@ export default function configuration(): AppConfig {
   const env = process.env;
   return {
     port: env.PORT ? Number(env.PORT) : DEFAULTS.port,
+    trustProxy: env.TRUST_PROXY ? Number(env.TRUST_PROXY) : 0,
     database: { url: env.DATABASE_URL ?? '' },
     security: { serviceApiKey: env.SERVICE_API_KEY ?? '' },
     llm: {

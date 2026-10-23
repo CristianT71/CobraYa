@@ -79,6 +79,15 @@ export class EnvironmentVariables {
   @IsUrl({ require_tld: false })
   A2A_PUBLIC_BASE_URL?: string;
 
+  // Cuántos proxies hay delante del servicio (Render, Railway...: 1). Con 0 no se
+  // confía en X-Forwarded-For. Sin esto, tras un proxy todos los clientes tendrían
+  // la misma IP y el bloqueo por intentos fallidos afectaría a todos a la vez.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  TRUST_PROXY?: number;
+
   @IsOptional()
   @Matches(DECIMAL, { message: 'TAX_RATE debe ser un decimal como 0.19 o 0' })
   TAX_RATE?: string;
@@ -99,6 +108,7 @@ const OPTIONAL_KEYS = [
   'LLM_TIMEOUT_MS',
   'LLM_MAX_TOKENS',
   'A2A_PUBLIC_BASE_URL',
+  'TRUST_PROXY',
   'TAX_RATE',
   'MAX_INVOICE_TOTAL',
   'LOG_LEVEL',
@@ -115,7 +125,12 @@ export function validateEnv(
     if (config[key] === '') delete env[key];
   }
   // Los enteros llegan como texto desde el .env; montos y tasas siguen como texto.
-  for (const key of ['PORT', 'LLM_TIMEOUT_MS', 'LLM_MAX_TOKENS'] as const) {
+  for (const key of [
+    'PORT',
+    'LLM_TIMEOUT_MS',
+    'LLM_MAX_TOKENS',
+    'TRUST_PROXY',
+  ] as const) {
     if (env[key] !== undefined) env[key] = Number(env[key]);
   }
 

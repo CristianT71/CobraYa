@@ -14,6 +14,8 @@ async function bootstrap() {
     logger,
   });
 
+  const trustProxy = app.get(ConfigService).getOrThrow<number>('trustProxy');
+  if (trustProxy > 0) app.set('trust proxy', trustProxy);
   configureApp(app);
   setupSwagger(app);
   const page = serveFrontend(app);
