@@ -8,10 +8,13 @@ import { LlmAuditService } from '../../../src/agent/llm/llm-audit.service';
 import { LLM_CALL_RECORDER } from '../../../src/agent/llm/llm-call-record';
 import { LlmCallLog } from '../../../src/agent/llm/llm-call-log.entity';
 import { LLM_EXTRACTOR } from '../../../src/agent/llm/llm-extractor.port';
+import { CUSTOMER_LOOKUP } from '../../../src/agent/ports/customer-lookup.port';
 import configuration from '../../../src/common/config/configuration';
+import { Customer } from '../../../src/customers/customer.entity';
+import { CustomersService } from '../../../src/customers/customers.service';
 
-// Comprueba que AgentModule resuelve todas sus dependencias. El repositorio de
-// llm_call_logs se reemplaza para no necesitar PostgreSQL.
+// Comprueba que AgentModule resuelve todas sus dependencias. Los repositorios
+// de llm_call_logs y customers se reemplazan para no necesitar PostgreSQL.
 describe('AgentModule', () => {
   it('registra el controlador, el adaptador de Fireworks y la bitácora', async () => {
     Object.assign(process.env, {
@@ -32,6 +35,8 @@ describe('AgentModule', () => {
     })
       .overrideProvider(getRepositoryToken(LlmCallLog))
       .useValue({ insert: jest.fn() })
+      .overrideProvider(getRepositoryToken(Customer))
+      .useValue({ find: jest.fn() })
       .compile();
 
     expect(moduleRef.get(AgentController)).toBeInstanceOf(AgentController);
@@ -40,6 +45,9 @@ describe('AgentModule', () => {
     );
     expect(moduleRef.get(LLM_CALL_RECORDER)).toBe(
       moduleRef.get(LlmAuditService),
+    );
+    expect(moduleRef.get(CUSTOMER_LOOKUP)).toBe(
+      moduleRef.get(CustomersService),
     );
     await moduleRef.close();
   });

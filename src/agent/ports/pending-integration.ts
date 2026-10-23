@@ -1,8 +1,7 @@
 import type { BillingGateway } from './billing-gateway.port';
-import type { CustomerLookup } from './customer-lookup.port';
 
-// Implementaciones provisionales mientras CustomersModule (Zaidy) y los casos
-// de uso de billing (Jheison) no estén en la rama. Permiten arrancar la app y
+// Implementación provisional mientras los casos de uso de billing (Jheison)
+// no estén en la rama. Permiten arrancar la app y
 // que las pruebas reemplacen los tokens; en producción fallarían con 500.
 // Se borran cuando agent.module enlace los tokens con los servicios reales.
 
@@ -14,11 +13,6 @@ class NotIntegratedError extends Error {
     this.name = 'NotIntegratedError';
   }
 }
-
-export const pendingCustomerLookup: CustomerLookup = {
-  findByDocument: () =>
-    Promise.reject(new NotIntegratedError('CustomersService')),
-};
 
 export const pendingBillingGateway: BillingGateway = {
   createInvoice: () => Promise.reject(new NotIntegratedError('CreateInvoice')),

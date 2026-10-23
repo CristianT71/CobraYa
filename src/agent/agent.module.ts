@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import OpenAI from 'openai';
 import type { AppConfig } from '../common/config/configuration';
+import { CustomersModule } from '../customers/customers.module';
+import { CustomersService } from '../customers/customers.service';
 import { AgentController } from './agent.controller';
 import { AgentOrchestrator } from './agent.orchestrator';
 import { FireworksExtractorAdapter } from './llm/fireworks-extractor.adapter';
@@ -12,10 +14,7 @@ import { LlmCallLog } from './llm/llm-call-log.entity';
 import { LLM_EXTRACTOR } from './llm/llm-extractor.port';
 import { BILLING_GATEWAY } from './ports/billing-gateway.port';
 import { CUSTOMER_LOOKUP } from './ports/customer-lookup.port';
-import {
-  pendingBillingGateway,
-  pendingCustomerLookup,
-} from './ports/pending-integration';
+import { pendingBillingGateway } from './ports/pending-integration';
 
 function createFireworksExtractor(
   config: ConfigService,
@@ -37,7 +36,7 @@ function createFireworksExtractor(
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([LlmCallLog])],
+  imports: [TypeOrmModule.forFeature([LlmCallLog]), CustomersModule],
   controllers: [AgentController],
   providers: [
     AgentOrchestrator,
@@ -49,9 +48,8 @@ function createFireworksExtractor(
       inject: [ConfigService, LLM_CALL_RECORDER],
       useFactory: createFireworksExtractor,
     },
-    // Pendiente: enlazar con CustomersService (Zaidy) y los casos de uso de
-    // billing (Jheison) cuando lleguen a la rama.
-    { provide: CUSTOMER_LOOKUP, useValue: pendingCustomerLookup },
+    { provide: CUSTOMER_LOOKUP, useExisting: CustomersService },
+    // Pendiente: enlazar con los casos de uso de billing (Jheison) cuando existan.
     { provide: BILLING_GATEWAY, useValue: pendingBillingGateway },
   ],
 })
