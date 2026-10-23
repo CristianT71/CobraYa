@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import OpenAI from 'openai';
+import { BillingModule } from '../billing/billing.module';
+import { Invoice } from '../billing/entities/invoice.entity';
 import type { AppConfig } from '../common/config/configuration';
 import { CustomersModule } from '../customers/customers.module';
 import { CustomersService } from '../customers/customers.service';
@@ -14,7 +16,7 @@ import { LlmCallLog } from './llm/llm-call-log.entity';
 import { LLM_EXTRACTOR } from './llm/llm-extractor.port';
 import { BILLING_GATEWAY } from './ports/billing-gateway.port';
 import { CUSTOMER_LOOKUP } from './ports/customer-lookup.port';
-import { pendingBillingGateway } from './ports/pending-integration';
+import { BillingUseCasesGateway } from './ports/billing-use-cases.gateway';
 
 function createFireworksExtractor(
   config: ConfigService,
@@ -36,7 +38,11 @@ function createFireworksExtractor(
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([LlmCallLog]), CustomersModule],
+  imports: [
+    TypeOrmModule.forFeature([LlmCallLog, Invoice]),
+    CustomersModule,
+    BillingModule,
+  ],
   controllers: [AgentController],
   providers: [
     AgentOrchestrator,
@@ -49,8 +55,8 @@ function createFireworksExtractor(
       useFactory: createFireworksExtractor,
     },
     { provide: CUSTOMER_LOOKUP, useExisting: CustomersService },
-    // Pendiente: enlazar con los casos de uso de billing (Jheison) cuando existan.
-    { provide: BILLING_GATEWAY, useValue: pendingBillingGateway },
+    BillingUseCasesGateway,
+    { provide: BILLING_GATEWAY, useExisting: BillingUseCasesGateway },
   ],
 })
 export class AgentModule {}
