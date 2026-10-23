@@ -121,6 +121,20 @@ describe('AgentOrchestrator', () => {
       });
     });
 
+    it('no vuelve a enmascarar un documento que billing ya devolvió enmascarado', async () => {
+      const { orchestrator, billing } = setup();
+      billing.createInvoice.mockResolvedValue({
+        ...PAID_INVOICE,
+        customer: { ...PAID_INVOICE.customer, document_number: '****6789' },
+      });
+
+      const response = await orchestrator.handle(REQUEST);
+
+      expect(response.data).toMatchObject({
+        customer: { document_number: '****6789' },
+      });
+    });
+
     it('sin pago informa que la cuenta queda pendiente', async () => {
       const { orchestrator, billing } = setup();
       billing.createInvoice.mockResolvedValue({

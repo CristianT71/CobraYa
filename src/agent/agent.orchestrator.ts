@@ -216,12 +216,17 @@ function missingFieldsMessage(fields: string[]): string {
 }
 
 // Las respuestas solo devuelven el documento enmascarado (contrato, sección 10.1).
+// billing ya devuelve el documento enmascarado; aquí solo se enmascara si llegó
+// completo, sin volver a tocar uno ya enmascarado (****6789 quedaría ****).
 function maskCustomer(result: InvoiceResultData): InvoiceResultData {
+  const documentNumber = result.customer.document_number;
   return {
     ...result,
     customer: {
       ...result.customer,
-      document_number: maskDigits(result.customer.document_number),
+      document_number: documentNumber.startsWith('****')
+        ? documentNumber
+        : maskDigits(documentNumber),
     },
   };
 }
