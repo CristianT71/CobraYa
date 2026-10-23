@@ -13,6 +13,14 @@ export interface AppConfig {
     timeoutMs: number;
     maxTokens: number;
   };
+  partners: {
+    /** Secreto del servidor con el que se calcula el hash de las keys de los negocios. */
+    keyPepper: string;
+  };
+  a2a: {
+    /** URL pública del servicio, sin barra final; es la que anuncia la tarjeta del bot. */
+    publicBaseUrl: string;
+  };
   billing: {
     /** Decimal como texto (por ejemplo "0.19"); se convierte con decimal.js en el dominio. */
     taxRate: string;
@@ -52,6 +60,13 @@ export default function configuration(): AppConfig {
       maxTokens: env.LLM_MAX_TOKENS
         ? Number(env.LLM_MAX_TOKENS)
         : DEFAULTS.llmMaxTokens,
+    },
+    partners: { keyPepper: env.PARTNER_KEY_PEPPER ?? '' },
+    a2a: {
+      publicBaseUrl: (
+        env.A2A_PUBLIC_BASE_URL ||
+        `http://localhost:${env.PORT ? Number(env.PORT) : DEFAULTS.port}`
+      ).replace(/\/+$/, ''),
     },
     billing: {
       taxRate: env.TAX_RATE || DEFAULTS.taxRate,

@@ -6,6 +6,7 @@ const VALID = {
   FIREWORKS_API_KEY: 'fw-key',
   FIREWORKS_BASE_URL: 'https://api.fireworks.ai/inference/v1',
   FIREWORKS_MODEL: 'accounts/fireworks/models/gpt-oss-120b',
+  PARTNER_KEY_PEPPER: 'p'.repeat(32),
 };
 
 describe('validateEnv', () => {
@@ -39,6 +40,32 @@ describe('validateEnv', () => {
     const env = validateEnv({ ...VALID, TAX_RATE: '', PORT: '' });
     expect(env.TAX_RATE).toBeUndefined();
     expect(env.PORT).toBeUndefined();
+  });
+
+  it('exige un PARTNER_KEY_PEPPER de al menos 32 caracteres', () => {
+    expect(() =>
+      validateEnv({ ...VALID, PARTNER_KEY_PEPPER: 'corto' }),
+    ).toThrow('PARTNER_KEY_PEPPER');
+    expect(
+      validateEnv({ ...VALID, PARTNER_KEY_PEPPER: 'x'.repeat(32) })
+        .PARTNER_KEY_PEPPER,
+    ).toHaveLength(32);
+  });
+
+  it('acepta A2A_PUBLIC_BASE_URL como URL y la trata como opcional', () => {
+    expect(validateEnv({ ...VALID }).A2A_PUBLIC_BASE_URL).toBeUndefined();
+    expect(
+      validateEnv({
+        ...VALID,
+        A2A_PUBLIC_BASE_URL: 'https://facturacion.example.co',
+      }).A2A_PUBLIC_BASE_URL,
+    ).toBe('https://facturacion.example.co');
+    expect(
+      validateEnv({ ...VALID, A2A_PUBLIC_BASE_URL: '' }).A2A_PUBLIC_BASE_URL,
+    ).toBeUndefined();
+    expect(() =>
+      validateEnv({ ...VALID, A2A_PUBLIC_BASE_URL: 'no es una url' }),
+    ).toThrow('A2A_PUBLIC_BASE_URL');
   });
 
   it('rechaza un LOG_LEVEL desconocido', () => {

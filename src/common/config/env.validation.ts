@@ -9,6 +9,7 @@ import {
   Matches,
   Max,
   Min,
+  MinLength,
   validateSync,
 } from 'class-validator';
 
@@ -65,6 +66,19 @@ export class EnvironmentVariables {
   @Min(1)
   LLM_MAX_TOKENS?: number;
 
+  // Secreto con el que se calcula el hash de las keys de los negocios (A2A).
+  @IsString()
+  @MinLength(32, {
+    message:
+      'PARTNER_KEY_PEPPER debe tener al menos 32 caracteres (por ejemplo: openssl rand -hex 32)',
+  })
+  PARTNER_KEY_PEPPER: string;
+
+  // URL pública del servicio; la anuncia la tarjeta del bot. Por defecto, localhost.
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  A2A_PUBLIC_BASE_URL?: string;
+
   @IsOptional()
   @Matches(DECIMAL, { message: 'TAX_RATE debe ser un decimal como 0.19 o 0' })
   TAX_RATE?: string;
@@ -84,6 +98,7 @@ const OPTIONAL_KEYS = [
   'PORT',
   'LLM_TIMEOUT_MS',
   'LLM_MAX_TOKENS',
+  'A2A_PUBLIC_BASE_URL',
   'TAX_RATE',
   'MAX_INVOICE_TOTAL',
   'LOG_LEVEL',

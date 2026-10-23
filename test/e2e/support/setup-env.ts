@@ -17,4 +17,5 @@ Object.assign(process.env, {
   FIREWORKS_MODEL: 'accounts/fireworks/models/gpt-oss-120b',
   TAX_RATE: '0.19',
   MAX_INVOICE_TOTAL: '50000000',
+  PARTNER_KEY_PEPPER: 'e2e-pepper-solo-para-pruebas-0123456789',
 });
