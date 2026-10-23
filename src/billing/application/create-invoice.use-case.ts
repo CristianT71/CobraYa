@@ -1,6 +1,6 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, IsNull, type EntityManager } from 'typeorm';
 import type { AppConfig } from '../../common/config/configuration';
 import { Customer } from '../../customers/customer.entity';
 import { CustomerNotFoundError } from '../domain/billing.errors';
@@ -72,11 +72,16 @@ export class CreateInvoiceUseCase implements CreateInvoiceUseCasePort {
     // RN-01: el cliente debe existir; este caso de uso nunca lo crea.
     const customer = await manager
       .getRepository(Customer)
-      .findOneBy({ id: command.customerId });
+      // El cliente debe ser del mismo ámbito (negocio o plataforma) que la cuenta.
+      .findOneBy({
+        id: command.customerId,
+        partnerId: command.partnerId ?? IsNull(),
+      });
     if (!customer) throw new CustomerNotFoundError();
 
     const { totals } = draft;
     const inserted = await manager.getRepository(Invoice).insert({
+      partnerId: command.partnerId ?? null,
       customerId: customer.id,
       status: draft.status as InvoiceStatusValue,
       subtotal: totals.subtotal.toString(),
@@ -148,6 +153,9 @@ function isSameRequest(
   existing: Invoice,
   command: CreateInvoiceCommand,
 ): boolean {
+  // Una clave de otro ámbito nunca es "la misma petición": 409 sin revelar nada.
+  if ((existing.partnerId ?? null) !== (command.partnerId ?? null))
+    return false;
   if (existing.customerId !== command.customerId) return false;
   if (existing.externalRef !== command.externalRef) return false;
 

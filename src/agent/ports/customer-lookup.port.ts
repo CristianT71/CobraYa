@@ -20,5 +20,7 @@ export interface CustomerLookup {
   findByDocument(
     documentType: DocumentType | null,
     documentNumber: string,
+    // Negocio dueño de los clientes; sin él es la plataforma.
+    partnerId?: string | null,
   ): Promise<CustomerSummary[]>;
 }

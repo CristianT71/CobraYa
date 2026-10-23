@@ -135,6 +135,7 @@ export function toCreateInvoiceCommand(
   extraction: Extraction,
   customerId: string,
   idempotencyKey: string,
+  partnerId?: string,
 ): CreateInvoiceCommand {
   const { method, amount } = extraction.payment;
   return {
@@ -148,6 +149,7 @@ export function toCreateInvoiceCommand(
     idempotencyKey,
     source: 'agent',
     externalRef: extraction.related_ids.external_ref,
+    ...(partnerId !== undefined ? { partnerId } : {}),
   };
 }
 
@@ -155,18 +157,24 @@ export function toRegisterPaymentCommand(
   extraction: Extraction,
   invoiceId: string,
   idempotencyKey: string,
+  partnerId?: string,
 ): RegisterPaymentCommand {
   return {
     invoiceId,
     method: extraction.payment.method!,
     amount: extraction.payment.amount,
     idempotencyKey,
+    ...(partnerId !== undefined ? { partnerId } : {}),
   };
 }
 
-export function toGetReceiptQuery(extraction: Extraction): GetReceiptQuery {
+export function toGetReceiptQuery(
+  extraction: Extraction,
+  partnerId?: string,
+): GetReceiptQuery {
   const { receipt_number, invoice_id } = extraction.related_ids;
+  const scope = partnerId !== undefined ? { partnerId } : {};
   return receipt_number !== null
-    ? { receiptNumber: receipt_number }
-    : { invoiceId: invoice_id! };
+    ? { receiptNumber: receipt_number, ...scope }
+    : { invoiceId: invoice_id!, ...scope };
 }

@@ -13,12 +13,20 @@ export class InvoiceQueryService {
     private readonly invoicesRepository: Repository<Invoice>,
   ) {}
 
-  async getResultById(invoiceId: string): Promise<InvoiceResultData> {
+  // `partnerId` restringe la consulta a las cuentas de un negocio; sin él no hay
+  // restricción (operador).
+  async getResultById(
+    invoiceId: string,
+    partnerId?: string,
+  ): Promise<InvoiceResultData> {
     const invoice = await this.invoicesRepository.findOne({
       where: { id: invoiceId },
       relations: { customer: true, items: true, payments: true, receipt: true },
     });
-    if (!invoice) {
+    if (
+      !invoice ||
+      (partnerId !== undefined && invoice.partnerId !== partnerId)
+    ) {
       throw new InvoiceNotFoundError();
     }
     return toInvoiceResultData(invoice);

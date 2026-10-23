@@ -56,7 +56,14 @@ export class RegisterPaymentUseCase implements RegisterPaymentUseCasePort {
     // FOR UPDATE: dos pagos simultáneos sobre la misma cuenta se serializan, y
     // el segundo ve el resultado del primero (replay o INVOICE_NOT_PAYABLE).
     const invoice = await lockInvoiceById(manager, command.invoiceId);
-    if (!invoice) throw new InvoiceNotFoundError();
+    // La cuenta de otro negocio es indistinguible de una que no existe.
+    if (
+      !invoice ||
+      (command.partnerId !== undefined &&
+        invoice.partnerId !== command.partnerId)
+    ) {
+      throw new InvoiceNotFoundError();
+    }
 
     const replayed = await this.findReplay(manager, command);
     if (replayed) return replayed;

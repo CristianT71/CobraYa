@@ -18,6 +18,9 @@ export interface CreateInvoiceCommand {
   idempotencyKey: string;
   source: 'agent' | 'direct';
   externalRef: string | null;
+  // Negocio dueño de la cuenta; sin él (o null) es la plataforma. El cliente debe
+  // pertenecer al mismo ámbito.
+  partnerId?: string | null;
 }
 
 export interface RegisterPaymentCommand {
@@ -26,9 +29,15 @@ export interface RegisterPaymentCommand {
   // Vacío: el código usa el total (RN-06).
   amount: string | null;
   idempotencyKey: string;
+  // Con negocio, solo puede pagar cuentas de ese negocio (si no, INVOICE_NOT_FOUND).
+  // Sin él no hay restricción: es el ámbito del operador (clave de servicio).
+  partnerId?: string;
 }
 
-export type GetReceiptQuery = { receiptNumber: number } | { invoiceId: string };
+// `partnerId` restringe la consulta a un negocio; sin él no hay restricción.
+export type GetReceiptQuery = (
+  { receiptNumber: number } | { invoiceId: string }
+) & { partnerId?: string };
 
 export interface CreateInvoiceUseCasePort {
   execute(command: CreateInvoiceCommand): Promise<InvoiceResultData>;

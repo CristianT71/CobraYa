@@ -46,10 +46,17 @@ export class BillingUseCasesGateway implements BillingGateway {
 
   // RN-08: para pagar sin indicar la cuenta, el cliente debe tener exactamente
   // una cuenta PENDING. Es solo una consulta; no hay caso de uso para ella.
-  async findPendingInvoiceIds(customerId: string): Promise<string[]> {
+  async findPendingInvoiceIds(
+    customerId: string,
+    partnerId?: string,
+  ): Promise<string[]> {
     const pending = await this.invoices.find({
       select: { id: true },
-      where: { customerId, status: 'PENDING' },
+      where: {
+        customerId,
+        status: 'PENDING',
+        ...(partnerId !== undefined ? { partnerId } : {}),
+      },
     });
     return pending.map((invoice) => invoice.id);
   }
