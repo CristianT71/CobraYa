@@ -37,8 +37,6 @@ Con el servicio arriba:
 - Estado: `GET http://localhost:3000/health` (no exige API key)
 - Swagger: `http://localhost:3000/docs` (documento OpenAPI en `/docs/json`)
 
-Los pasos 3 y 4 dependen de `docker-compose.yml`, las migraciones y los datos semilla (parte de datos y persistencia). Hasta que lleguen a `main`, el servicio arranca solo si hay un PostgreSQL accesible en `DATABASE_URL`.
-
 ## Ejemplo de solicitud
 
 ```bash
@@ -54,21 +52,32 @@ Toda respuesta trae `status` (`completed`, `needs_clarification`, `rejected` o `
 ## Pruebas
 
 ```bash
-npm test            # unitarias (test/unit y *.spec.ts)
-npm run test:e2e    # HTTP completas con el extractor simulado (test/e2e)
+npm test                 # unitarias (test/unit): dominio, orquestador, adaptador, reglas de dependencia
+npm run test:integration # casos de uso, restricciones del esquema y clientes contra PostgreSQL
+npm run test:e2e         # HTTP completas: /agent/requests y /billing/* con el extractor simulado
 npm run lint
 ```
 
-Las e2e de la aplicación completa (`test/e2e/app.e2e-spec.ts`) necesitan un PostgreSQL de prueba con las migraciones aplicadas; si `E2E_DATABASE_URL` no está definida, se omiten:
+Las de integración y las e2e de la aplicación completa necesitan un PostgreSQL de prueba con las migraciones aplicadas; si `E2E_DATABASE_URL` no está definida, esas suites se omiten. El `docker-compose.yml` trae una base para esto (`db_test`, puerto 5433, sin persistencia):
 
 ```bash
-E2E_DATABASE_URL=postgres://usuario:clave@localhost:5432/base_de_prueba npm run test:e2e
+docker compose up -d db_test
+DATABASE_URL=postgres://facturacion:facturacion@localhost:5433/facturacion_test npm run migration:run
+export E2E_DATABASE_URL=postgres://facturacion:facturacion@localhost:5433/facturacion_test
+npm run test:integration && npm run test:e2e
 # PowerShell: $env:E2E_DATABASE_URL="postgres://..."; npm run test:e2e
 ```
 
 Para nuevas e2e usa `createTestApp()`, `resetDatabase()` y `api()` de `test/e2e/support/test-app.ts`.
 
-Ninguna de estas pruebas llama al LLM real. El dataset dorado (`test/golden/`) se ejecuta aparte contra el modelo.
+Ninguna de estas pruebas llama al LLM real. El dataset dorado (`test/golden/`) se ejecuta aparte contra el modelo, con `FIREWORKS_API_KEY` en `.env`:
+
+```bash
+npm run golden                        # corre los 42 casos y compara con la corrida anterior
+npm run golden -- --only g-001,g-013  # solo esos casos
+```
+
+Mide la precisión de intención (meta 95 %) y de cliente y montos (meta 90 %) y guarda cada corrida en `test/golden/results/` para comparar versiones del prompt (`PROMPT_VERSION`).
 
 ## Estructura
 
@@ -101,6 +110,9 @@ test/
 - **request_id:** usa `resolveRequestId(req)` de `common/interceptors/request-id.interceptor.ts` para obtener el mismo valor que viaja en la respuesta y en los logs.
 - **Logs:** usa `new Logger(MiClase.name)`; el logger global ya enmascara cédulas y oculta claves. Aun así, enmascara con `maskDocument()` lo que vaya a `llm_call_logs` y a las respuestas.
 - **Configuración:** lee con `ConfigService`, por ejemplo `config.getOrThrow<string>('billing.taxRate')`. Las claves están en `src/common/config/configuration.ts`.
+- **Migraciones:** `synchronize` está apagado; todo cambio de columna es una migración nueva en `src/database/migrations/` (`npm run migration:run` / `migration:revert`) y se revisa con quien mantiene los datos. No edites una migración ya ejecutada.
+- **Dependencias entre módulos:** `agent` puede usar `billing` y `customers`; nunca al revés. `billing/domain` no importa NestJS, TypeORM ni el LLM, y solo `agent/llm/fireworks-extractor.adapter.ts` conoce al proveedor. `test/unit/architecture.spec.ts` lo comprueba sobre los imports reales.
+- **Modelo caído:** el adaptador reintenta con espera creciente y, tras 5 solicitudes seguidas sin respuesta, corta las llamadas 30 s (`agent/llm/circuit-breaker.ts`) y responde `LLM_UNAVAILABLE` de inmediato.
 - **Swagger:** documenta cada endpoint con `@ApiTags`, `@ApiOperation`, `@ApiStandardErrors()` y, en los POST que crean o pagan, `@ApiIdempotencyKey()`.
 
 ## Trabajo en equipo
