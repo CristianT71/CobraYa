@@ -12,6 +12,45 @@ Todos son **compatibles** (campos o códigos nuevos, comportamiento que el contr
 no definía). Ninguno cambia el significado de un campo existente, así que subirían
 la versión menor a **1.1.0**.
 
+### Varios negocios usan el servicio (A2A)
+
+El contrato 1.0.0 describe un servicio detrás de **un** supervisor con **una** key. Ahora
+varios negocios (concesionario, taller, repuestos...) lo usan, cada uno con su key. Detalle
+para ellos en [`docs/CONTRATO-A2A.md`](docs/CONTRATO-A2A.md).
+
+- **Rutas nuevas** (sección 7.2): `GET /.well-known/agent.json` (tarjeta pública),
+  `POST /a2a/tasks` (key del negocio), `GET|POST|PATCH /admin/partners…` (solo el operador),
+  `GET /public/info` y `POST /public/receipts/verify` (públicas, con límites), y la página web en `/`.
+  Las rutas públicas (`@Public`) ya no son solo `/health`; cada una tiene su propia protección.
+- **Habilidades** (`/a2a/tasks`): `registrar_cliente`, `crear_cuenta`, `registrar_pago`,
+  `consultar_cuenta`, `consultar_comprobante` y `lenguaje_natural`, con el formato `{from, message}`
+  del concesionario o `{skill, params}`. El operador puede limitar las habilidades de cada negocio.
+- **Aislamiento por negocio** (sección 5.7): cada negocio solo ve y toca sus clientes, sus
+  cuentas y sus comprobantes; lo ajeno responde igual que lo inexistente. La unicidad del
+  documento del cliente pasa a ser **por negocio** (índice `uq_customers_scope_document`).
+- **Modelo de datos** (sección 5): tablas `partners` y `partner_exchanges`; columna `partner_id`
+  (nula = la plataforma, el ámbito de `SERVICE_API_KEY`) en `customers` e `invoices`. Migración
+  `1792713600000-AddPartnersAndTenancy`.
+- **Keys** (sección 10.1): `fac_…`, una por negocio, mostrada una sola vez; en la base solo queda su HMAC con
+  `PARTNER_KEY_PEPPER`. Se aceptan en `Authorization: Bearer` o `X-API-Key`. Una key falsa, ausente o de un
+  negocio desactivado reciben exactamente la misma respuesta. Diez intentos inválidos bloquean la IP 15 minutos.
+- **Límites por negocio** (sección 9.2): 30 solicitudes por minuto y 500 por día por defecto
+  (configurables), cuerpo de hasta 16 KB; `429` con `Retry-After`.
+- **Idempotencia entre negocios** (sección 7.6): la clave es de cada negocio (se antepone su identificador),
+  así que dos negocios no chocan ni pueden leer la cuenta del otro con la misma clave.
+- **Variables de entorno** (sección 10.4): `PARTNER_KEY_PEPPER` (**obligatoria**, mínimo 32 caracteres) y
+  `A2A_PUBLIC_BASE_URL` (opcional; la URL que anuncia la tarjeta).
+- **Alcance** (sección 12.6): *"Alta y edición de clientes"* ya no está fuera de alcance del todo: los negocios
+  **registran** clientes (habilidad `registrar_cliente`), con datos estructurados. La edición sigue fuera de alcance, y
+  RN-01 sigue vigente para el lenguaje natural (nunca se crean clientes con datos que extrajo el modelo).
+  *"Interfaz gráfica"* tampoco: hay una página web (portada, guía y consola para negocios, verificación de
+  comprobantes y panel del operador).
+- **Verificación pública de comprobantes**: exige el número **y** el documento del cliente; un número inexistente y un
+  documento equivocado responden igual; 10 consultas por minuto por IP y bloqueo tras 10 fallos.
+- **`answer`**: las respuestas de `/a2a/*` incluyen un texto listo para mostrar, siempre (también en errores).
+  `/agent/*` y `/billing/*` no cambian.
+- **Alcance por escrito**: somos facturación, no contabilidad (libros, balances, reportes tributarios).
+
 ### Catálogo de errores (secciones 7.5 y 9.1)
 
 | Código | `status` | HTTP directo | HTTP `/agent` | Cuándo |
@@ -22,6 +61,11 @@ la versión menor a **1.1.0**.
 | `UNAUTHORIZED` | `rejected` | 401 | 401 | Falta o es inválida la `X-API-Key` |
 | `NOT_FOUND` | `rejected` | 404 | 404 | Ruta inexistente |
 | `IDEMPOTENCY_CONFLICT` | `rejected` | 409 | 409 | Misma `Idempotency-Key` con un cuerpo distinto |
+| `SKILL_NOT_ALLOWED` | `rejected` | 403 | 403 | El negocio no tiene permiso para esa habilidad |
+| `RATE_LIMITED` | `rejected` | 429 | 429 | Límite por minuto o bloqueo por intentos con key inválida (con `Retry-After`) |
+| `QUOTA_EXCEEDED` | `rejected` | 429 | 429 | Cuota diaria del negocio agotada |
+| `PARTNER_EXISTS` | `rejected` | 409 | 409 | Ya existe un negocio con ese identificador (administración) |
+| `PARTNER_NOT_FOUND` | `rejected` | 404 | 404 | El negocio no existe (administración) |
 
 Nota: `IDEMPOTENCY_CONFLICT` responde 409 también en `/agent/requests`, no 200 (la
 sección 7.5 ya fija 409 para este caso; la 9.1 no lo listaba como código).
