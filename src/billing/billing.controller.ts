@@ -128,7 +128,7 @@ export class BillingController {
 
   @Post('invoices/:id/payments')
   @ApiOperation({
-    summary: 'Registra un pago simulado sobre una cuenta PENDING',
+    summary: 'Registra un pago sobre una cuenta PENDING',
   })
   @ApiIdempotencyKey()
   @ApiCreatedResponse({ type: InvoiceResultResponseDto })

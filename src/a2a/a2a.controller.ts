@@ -55,7 +55,7 @@ export class AgentCardController {
     return {
       name: 'Facturación y Pagos',
       description:
-        'Negocio de facturación: crea cuentas de cobro, registra pagos simulados y emite comprobantes para otros negocios. No es facturación electrónica ni contabilidad.',
+        'Negocio de facturación: crea cuentas de cobro, registra pagos y emite comprobantes para otros negocios. No es facturación electrónica ni contabilidad.',
       url: `${base}/a2a`,
       version: CONTRACT_VERSION,
       skills: [...PARTNER_SKILLS],

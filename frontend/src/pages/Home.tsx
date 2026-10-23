@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icon, type IconName } from '../components/Icon';
 import { api, type ServiceInfo } from '../lib/api';
 
 // Se muestra mientras llega /public/info (o si el servicio no responde): la
@@ -6,15 +7,93 @@ import { api, type ServiceInfo } from '../lib/api';
 const FALLBACK_SCOPE: ServiceInfo['scope'] = {
   does: [
     'Cuentas de cobro con sus ítems y cálculo exacto de subtotal, impuesto y total',
-    'Pagos simulados, únicos y completos',
+    'Pagos únicos y completos',
     'Comprobantes con consecutivo interno',
   ],
   does_not: [
     'Facturación electrónica ni DIAN',
     'Contabilidad (libros, balances, reportes tributarios)',
-    'Cobros de dinero reales',
+    'Procesamiento de tarjetas ni movimiento de dinero: el pago se registra en el sistema',
   ],
 };
+
+const FEATURES: { icon: IconName; title: string; text: string }[] = [
+  {
+    icon: 'calculator',
+    title: 'Cuentas de cobro exactas',
+    text: 'Subtotal, impuesto y total se calculan con aritmética decimal exacta, nunca con la IA. Lo que cobramos hoy es lo mismo que cobraremos mañana.',
+  },
+  {
+    icon: 'receipt',
+    title: 'Pagos y comprobantes',
+    text: 'Registramos el pago, pasamos la cuenta a pagada y emitimos un comprobante con consecutivo que tu cliente puede verificar en esta página.',
+  },
+  {
+    icon: 'chat',
+    title: 'Habla como hablas',
+    text: '«Cóbrale a la cédula 1032456789 un cambio de aceite de 80.000, pagó en efectivo». La IA solo entiende la frase; el código decide y guarda.',
+  },
+  {
+    icon: 'key',
+    title: 'Una key por negocio',
+    text: 'Cada negocio ve y toca solo lo suyo. Lo ajeno responde igual que lo inexistente, con límites por minuto y por día.',
+  },
+  {
+    icon: 'shield',
+    title: 'Sin cobros duplicados',
+    text: 'Con una clave de idempotencia, reintentar una petición devuelve el mismo resultado: ni cuentas ni pagos repetidos.',
+  },
+  {
+    icon: 'link',
+    title: 'Hecho para conectarse',
+    text: 'Tu bot nos habla por A2A: tarjeta pública, habilidades con datos estructurados y respuestas listas para mostrar.',
+  },
+];
+
+const HIGHLIGHTS = [
+  { value: '6', label: 'habilidades disponibles' },
+  { value: '100 %', label: 'aritmética decimal exacta' },
+  { value: '1 key', label: 'por cada negocio' },
+  { value: 'A2A', label: 'listo para tu bot' },
+];
+
+function HeroPreview() {
+  return (
+    <div className="preview" aria-label="Ejemplo de una cuenta de cobro">
+      <p className="preview-tag">Ejemplo</p>
+      <div className="bubble bubble-in">
+        Cóbrale a la cédula 1032456789 un cambio de aceite de 80.000, pagó en
+        efectivo
+      </div>
+      <div className="bubble bubble-out">
+        <span className="bubble-ok">
+          <Icon name="check" />
+        </span>
+        Listo. Cuenta pagada en efectivo por $95.200.
+      </div>
+      <div className="doc">
+        <div className="doc-head">
+          <span>Comprobante</span>
+          <span className="pill">Pagada</span>
+        </div>
+        <dl className="doc-lines">
+          <div>
+            <dt>Cambio de aceite</dt>
+            <dd>$80.000</dd>
+          </div>
+          <div>
+            <dt>Impuesto (19 %)</dt>
+            <dd>$15.200</dd>
+          </div>
+        </dl>
+        <div className="doc-total">
+          <span>Total</span>
+          <strong>$95.200</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Home() {
   const [info, setInfo] = useState<ServiceInfo | null>(null);
@@ -37,7 +116,8 @@ export function Home() {
   return (
     <>
       <section className="hero" aria-labelledby="titulo">
-        <div>
+        <div className="hero-copy">
+          <p className="eyebrow">Facturación para negocios conectados</p>
           <h1 id="titulo">Facturación y Pagos</h1>
           <p className="lead">
             El negocio que cobra por los demás. Tu taller, concesionario o
@@ -45,44 +125,57 @@ export function Home() {
             comprobante, ya sea con una frase en español o con datos
             estructurados, y recibe el total exacto y el comprobante.
           </p>
+          <div className="actions">
+            <a className="btn btn-light" href="#/negocios">
+              Conectar mi negocio
+            </a>
+            <a className="btn btn-outline-light" href="#/comprobantes">
+              Verificar un comprobante
+            </a>
+          </div>
+          <ul className="chips">
+            <li>
+              <Icon name="bolt" />
+              Respuesta lista para tu cliente
+            </li>
+            <li>
+              <Icon name="shield" />
+              Sin duplicados
+            </li>
+            <li>
+              <Icon name="clock" />
+              Disponible todo el día
+            </li>
+          </ul>
         </div>
-        <div className="actions">
-          <a className="btn" href="#/negocios">
-            Conectar mi negocio
-          </a>
-          <a className="btn btn-secondary" href="#/comprobantes">
-            Verificar un comprobante
-          </a>
-        </div>
+        <HeroPreview />
       </section>
+
+      <ul className="highlights" aria-label="En cifras">
+        {HIGHLIGHTS.map((item) => (
+          <li key={item.label}>
+            <strong>{item.value}</strong>
+            <span>{item.label}</span>
+          </li>
+        ))}
+      </ul>
 
       <section className="section" aria-labelledby="que-hacemos">
         <h2 id="que-hacemos">Qué hacemos por tu negocio</h2>
+        <p className="intro">
+          Todo el ciclo de cobro en un solo lugar: de la frase del cliente al
+          comprobante.
+        </p>
         <div className="grid">
-          <article className="card">
-            <h3>Cuentas de cobro exactas</h3>
-            <p>
-              Subtotal, impuesto y total se calculan con aritmética decimal
-              exacta, nunca con la IA. Lo que te cobramos hoy es lo mismo que te
-              cobraremos mañana.
-            </p>
-          </article>
-          <article className="card">
-            <h3>Pagos y comprobantes</h3>
-            <p>
-              Registramos el pago (simulado), pasamos la cuenta a pagada y
-              emitimos un comprobante con consecutivo, que tu cliente puede
-              verificar en esta página.
-            </p>
-          </article>
-          <article className="card">
-            <h3>Habla como hablas</h3>
-            <p>
-              «Cóbrale a la cédula 1032456789 un cambio de aceite de 80.000, pagó
-              en efectivo». La IA solo entiende la frase; el código decide y
-              guarda.
-            </p>
-          </article>
+          {FEATURES.map((feature) => (
+            <article className="card feature" key={feature.title}>
+              <span className="feature-icon">
+                <Icon name={feature.icon} />
+              </span>
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -150,6 +243,19 @@ export function Home() {
           </ul>
         </section>
       )}
+
+      <section className="cta" aria-labelledby="cta-titulo">
+        <div>
+          <h2 id="cta-titulo">¿Listo para cobrar sin complicarte?</h2>
+          <p>
+            Pide la key de tu negocio y prueba una cuenta de cobro en la consola
+            en menos de cinco minutos.
+          </p>
+        </div>
+        <a className="btn btn-light" href="#/negocios">
+          Ir a la guía y la consola
+        </a>
+      </section>
     </>
   );
 }

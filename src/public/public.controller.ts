@@ -62,7 +62,7 @@ export class PublicController {
     return {
       name: 'Facturación y Pagos',
       description:
-        'Negocio de facturación para el ecosistema de taller vehicular: crea cuentas de cobro, registra pagos simulados y emite comprobantes para otros negocios, ya sea con una frase en español o con datos estructurados.',
+        'Negocio de facturación para el ecosistema de taller vehicular: crea cuentas de cobro, registra pagos y emite comprobantes para otros negocios, ya sea con una frase en español o con datos estructurados.',
       version: CONTRACT_VERSION,
       a2a: {
         card_url: `${base}/.well-known/agent.json`,
@@ -77,13 +77,13 @@ export class PublicController {
       scope: {
         does: [
           'Cuentas de cobro con sus ítems, cálculo exacto de subtotal, impuesto y total',
-          'Pagos simulados, únicos y completos',
+          'Pagos únicos y completos',
           'Comprobantes con consecutivo interno',
         ],
         does_not: [
           'Facturación electrónica ni DIAN',
           'Contabilidad (libros, balances, reportes tributarios)',
-          'Cobros de dinero reales',
+          'Procesamiento de tarjetas ni movimiento de dinero: el pago se registra en el sistema',
         ],
       },
     };

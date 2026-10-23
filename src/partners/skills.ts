@@ -19,7 +19,7 @@ export const SKILL_DESCRIPTIONS: Record<PartnerSkill, string> = {
   crear_cuenta:
     'Crea una cuenta de cobro con sus ítems; con método de pago, queda pagada y emite comprobante.',
   registrar_pago:
-    'Registra el pago simulado, único y completo, de una cuenta pendiente y emite el comprobante.',
+    'Registra el pago, único y completo, de una cuenta pendiente y emite el comprobante.',
   consultar_cuenta:
     'Consulta una cuenta de cobro: ítems, totales, pago y comprobante.',
   consultar_comprobante:

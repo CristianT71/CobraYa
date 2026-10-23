@@ -71,10 +71,24 @@ export function Layout({
 
       <footer className="site-footer">
         <div className="container footer-inner">
-          <HealthBadge />
-          <p>
-            Proyecto educativo: no es facturación electrónica, ni DIAN, ni
-            contabilidad, y los pagos son simulados.
+          <div className="footer-brand">
+            <strong>Facturación y Pagos</strong>
+            <HealthBadge />
+          </div>
+          <nav aria-label="Secundaria">
+            <ul className="footer-links">
+              {ROUTES.map((item) => (
+                <li key={item.path}>
+                  <a href={`#${item.path}`}>{item.label}</a>
+                </li>
+              ))}
+              <li>
+                <a href="/docs">API</a>
+              </li>
+            </ul>
+          </nav>
+          <p className="footer-legal">
+            No es facturación electrónica ante la DIAN ni un sistema contable.
           </p>
         </div>
       </footer>

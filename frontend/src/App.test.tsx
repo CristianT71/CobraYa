@@ -1,9 +1,14 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { CodeBlock } from './components/CodeBlock';
 import { SERVICE_INFO, mockFetch } from './test/helpers';
+
+// El menú principal; el pie repite los mismos enlaces.
+function menu() {
+  return within(screen.getByRole('navigation', { name: 'Principal' }));
+}
 
 function serve(options: { info?: boolean; healthy?: boolean } = {}) {
   const { info = true, healthy = true } = options;
@@ -33,7 +38,7 @@ describe('App: enrutado', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Facturación y Pagos' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Inicio' })).toHaveAttribute('aria-current', 'page');
+    expect(menu().getByRole('link', { name: 'Inicio' })).toHaveAttribute('aria-current', 'page');
   });
 
   it.each([
@@ -47,8 +52,8 @@ describe('App: enrutado', () => {
     go(hash);
 
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: navLabel })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: 'Inicio' })).not.toHaveAttribute('aria-current');
+    expect(menu().getByRole('link', { name: navLabel })).toHaveAttribute('aria-current', 'page');
+    expect(menu().getByRole('link', { name: 'Inicio' })).not.toHaveAttribute('aria-current');
   });
 
   it('una ruta desconocida vuelve a la portada', async () => {
@@ -77,7 +82,7 @@ describe('App: enrutado', () => {
     render(<App />);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('link', { name: 'Para negocios' }));
+    await user.click(menu().getByRole('link', { name: 'Para negocios' }));
 
     expect(window.location.hash).toBe('#/negocios');
   });
@@ -151,11 +156,21 @@ describe('App: estado del servicio', () => {
     expect(await screen.findByText('Servicio no disponible')).toBeInTheDocument();
   });
 
-  it('aclara en el pie que es un proyecto educativo', async () => {
+  it('aclara en el pie que no es facturación electrónica ni contabilidad', async () => {
     serve();
     render(<App />);
 
-    expect(await screen.findByText(/Proyecto educativo/)).toHaveTextContent(/pagos son simulados/);
+    expect(await screen.findByText(/No es facturación electrónica ante la DIAN/)).toHaveTextContent(
+      /ni un sistema contable/,
+    );
+  });
+
+  it('no repite la palabra «simulado» en ninguna página pública', async () => {
+    serve();
+    render(<App />);
+
+    await screen.findByText('Habilidades disponibles');
+    expect(document.body).not.toHaveTextContent(/simulad/i);
   });
 });
 
