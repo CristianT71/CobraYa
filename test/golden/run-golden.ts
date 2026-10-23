@@ -6,10 +6,12 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import OpenAI from 'openai';
 import { PROMPT_VERSION } from '../../src/agent/llm/extraction.prompt';
 import type { Extraction } from '../../src/agent/llm/extraction.schema';
-import { FireworksExtractorAdapter } from '../../src/agent/llm/fireworks-extractor.adapter';
+import {
+  type FireworksExtractorAdapter,
+  createFireworksExtractor,
+} from '../../src/agent/llm/fireworks-extractor.adapter';
 import {
   type CaseScore,
   type GoldenCase,
@@ -74,19 +76,13 @@ function loadEnv(): void {
 }
 
 function createExtractor(): FireworksExtractorAdapter {
-  const client = new OpenAI({
-    apiKey: process.env.FIREWORKS_API_KEY,
-    baseURL: process.env.FIREWORKS_BASE_URL,
-    timeout: Number(process.env.LLM_TIMEOUT_MS ?? 15000),
-    maxRetries: 0,
+  return createFireworksExtractor({
+    apiKey: process.env.FIREWORKS_API_KEY as string,
+    baseUrl: process.env.FIREWORKS_BASE_URL as string,
+    timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 15000),
+    model: process.env.FIREWORKS_MODEL as string,
+    maxTokens: Number(process.env.LLM_MAX_TOKENS ?? 1000),
   });
-  return new FireworksExtractorAdapter(
-    { create: (params) => client.chat.completions.create(params) },
-    {
-      model: process.env.FIREWORKS_MODEL as string,
-      maxTokens: Number(process.env.LLM_MAX_TOKENS ?? 1000),
-    },
-  );
 }
 
 async function runCases(

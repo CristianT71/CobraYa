@@ -9,6 +9,7 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
 } from 'openai/resources/chat/completions';
 import { PROMPT_VERSION } from '../../../src/agent/llm/extraction.prompt';
+import { CircuitBreaker } from '../../../src/agent/llm/circuit-breaker';
 import {
   type ChatCompletionClient,
   FireworksExtractorAdapter,
@@ -249,5 +250,120 @@ describe('FireworksExtractorAdapter', () => {
     await expect(adapter.extract('texto')).resolves.toEqual(
       MOCK_EXTRACTIONS.completeInvoice,
     );
+  });
+
+  describe('circuito contra Fireworks caído', () => {
+    const down = () =>
+      new InternalServerError(500, undefined, 'boom', new Headers());
+
+    // Cada extract() agotado (1 llamada + 2 reintentos) cuenta como una falla.
+    function setupBreaker(queue: Array<string | Error>) {
+      let clock = 0;
+      const breaker = new CircuitBreaker(
+        { failureThreshold: 2, cooldownMs: 1000 },
+        () => clock,
+      );
+      const client = new FakeClient(queue);
+      const recorder = new FakeRecorder();
+      const adapter = new FireworksExtractorAdapter(
+        client,
+        { model: MODEL, maxTokens: 1000, breaker },
+        recorder,
+        () => Promise.resolve(),
+      );
+      return {
+        adapter,
+        client,
+        recorder,
+        advance: (ms: number) => (clock += ms),
+      };
+    }
+
+    const fails = [down(), down(), down()];
+
+    it('tras varias solicitudes seguidas sin respuesta deja de llamar a Fireworks', async () => {
+      const { adapter, client } = setupBreaker([...fails, ...fails]);
+
+      await adapter.extract('uno').catch(() => undefined);
+      await adapter.extract('dos').catch(() => undefined);
+      expect(client.requests).toHaveLength(6);
+
+      const error = await adapter.extract('tres').catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(LlmUnavailableError);
+      expect((error as LlmUnavailableError).timedOut).toBe(false);
+      expect(client.requests).toHaveLength(6);
+    });
+
+    it('registra en la bitácora la llamada rechazada por el circuito', async () => {
+      const { adapter, recorder } = setupBreaker([...fails, ...fails]);
+      await adapter.extract('uno').catch(() => undefined);
+      await adapter.extract('dos').catch(() => undefined);
+
+      await adapter
+        .extract('tres', { requestId: 'sup-3' })
+        .catch(() => undefined);
+
+      expect(recorder.calls.at(-1)).toMatchObject({
+        requestId: 'sup-3',
+        parsedOk: false,
+        rawOutput: null,
+        error: expect.stringContaining('Circuito abierto'),
+      });
+    });
+
+    it('vencido el enfriamiento prueba con una llamada y, si responde, se recupera', async () => {
+      const { adapter, client, advance } = setupBreaker([
+        ...fails,
+        ...fails,
+        VALID_JSON,
+        VALID_JSON,
+      ]);
+      await adapter.extract('uno').catch(() => undefined);
+      await adapter.extract('dos').catch(() => undefined);
+      await adapter.extract('tres').catch(() => undefined);
+
+      advance(1000);
+
+      await expect(adapter.extract('cuatro')).resolves.toBeDefined();
+      await expect(adapter.extract('cinco')).resolves.toBeDefined();
+      expect(client.requests).toHaveLength(8);
+    });
+
+    it('una salida inválida del modelo no abre el circuito: el proveedor sí respondió', async () => {
+      const { adapter } = setupBreaker([
+        'no es json',
+        'no es json',
+        'no es json',
+        'no es json',
+        VALID_JSON,
+      ]);
+
+      await expect(adapter.extract('uno')).rejects.toBeInstanceOf(
+        ExtractionFailedError,
+      );
+      await expect(adapter.extract('dos')).rejects.toBeInstanceOf(
+        ExtractionFailedError,
+      );
+      await expect(adapter.extract('tres')).resolves.toBeDefined();
+    });
+
+    it('una clave inválida (401) no abre el circuito', async () => {
+      const unauthorized = () =>
+        new AuthenticationError(401, undefined, 'bad key', new Headers());
+      const { adapter, client } = setupBreaker([
+        unauthorized(),
+        unauthorized(),
+        unauthorized(),
+        VALID_JSON,
+      ]);
+
+      for (const text of ['uno', 'dos', 'tres']) {
+        await adapter.extract(text).catch(() => undefined);
+      }
+
+      await expect(adapter.extract('cuatro')).resolves.toBeDefined();
+      expect(client.requests).toHaveLength(4);
+    });
   });
 });
