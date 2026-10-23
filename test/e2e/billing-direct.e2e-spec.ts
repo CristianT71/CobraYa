@@ -469,12 +469,18 @@ describeWithDb('Camino directo /billing/* (e2e con PostgreSQL)', () => {
         [
           '/.well-known/agent.json',
           '/a2a/tasks',
+          '/admin/partners',
+          '/admin/partners/{id}',
+          '/admin/partners/{id}/exchanges',
+          '/admin/partners/{id}/rotate-key',
           '/agent/requests',
           '/billing/invoices',
           '/billing/invoices/{id}',
           '/billing/invoices/{id}/payments',
           '/billing/receipts/{receiptNumber}',
           '/health',
+          '/public/info',
+          '/public/receipts/verify',
         ].sort(),
       );
       expect(document.paths['/agent/requests']).toHaveProperty('post');
