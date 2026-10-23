@@ -16,7 +16,9 @@ export interface ProviderOverride {
 }
 
 // Tablas con datos semilla que se conservan entre pruebas.
-const KEEP_TABLES = new Set(['customers']);
+// partners y partner_exchanges también se conservan: vaciar partners con CASCADE
+// borraría los clientes, que dependen de ella. Cada suite administra sus negocios.
+const KEEP_TABLES = new Set(['customers', 'partners', 'partner_exchanges']);
 
 /**
  * Levanta la aplicación completa (AppModule) con la misma configuración global

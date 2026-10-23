@@ -459,7 +459,7 @@ describeWithDb('Camino directo /billing/* (e2e con PostgreSQL)', () => {
       expect(res.body).toMatchObject({ status: 'ok', database: 'up' });
     });
 
-    it('Swagger documenta todos los endpoints de la sección 7', () => {
+    it('Swagger documenta todos los endpoints de la sección 7 y los del canal de negocios', () => {
       const document = SwaggerModule.createDocument(
         app,
         new DocumentBuilder().build(),
@@ -467,6 +467,8 @@ describeWithDb('Camino directo /billing/* (e2e con PostgreSQL)', () => {
 
       expect(Object.keys(document.paths).sort()).toEqual(
         [
+          '/.well-known/agent.json',
+          '/a2a/tasks',
           '/agent/requests',
           '/billing/invoices',
           '/billing/invoices/{id}',
@@ -485,6 +487,8 @@ describeWithDb('Camino directo /billing/* (e2e con PostgreSQL)', () => {
         document.paths['/billing/receipts/{receiptNumber}'],
       ).toHaveProperty('get');
       expect(document.paths['/health']).toHaveProperty('get');
+      expect(document.paths['/a2a/tasks']).toHaveProperty('post');
+      expect(document.paths['/.well-known/agent.json']).toHaveProperty('get');
     });
   });
 });
