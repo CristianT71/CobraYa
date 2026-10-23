@@ -51,10 +51,26 @@ sección 7.5 ya fija 409 para este caso; la 9.1 no lo listaba como código).
   texto y no admite `null`, así que el prompt 1.1.0 le indica al modelo usar cadena vacía en
   vez de inventar `"0.00"`. El código lo trata como dato faltante y responde
   `needs_clarification` con `missing_fields: ["items[N].unit_price"]`.
-- **Prompt `1.1.0`** (antes `1.0.0`): reglas explícitas para tipo de documento ("cédula" →
+- **Prompt `1.2.0`** (antes `1.0.0`): reglas explícitas para tipo de documento ("cédula" →
   `CC`, número sin tipo → `null`), cantidad (por defecto 1), montos con palabras ("80 mil",
-  "30k", "1,5 millones") y método de pago. **Sin medir todavía** contra el modelo real: falta
-  la primera corrida de `npm run golden`.
+  "30k", "1,5 millones"), método de pago, y dos aclaraciones que el modelo confundía: cobrar
+  ítems y decir que "ya pagó" sigue siendo `create_invoice` (el pago nace con la cuenta, RN-05),
+  y el valor de un ítem va siempre en `unit_price`, nunca en `payment.amount`.
+  Medido con `npm run golden` contra gpt-oss-120b en Fireworks:
+
+  | Prompt | Casos | Intención (meta 95 %) | Cliente y montos (meta 90 %) |
+  |---|---|---|---|
+  | 1.0.0 | 42 | 92,9 % | 68,6 % |
+  | 1.1.0 | 42 | 90,5 % | 94,3 % |
+  | 1.2.0 | 42 | 100 % | 100 % |
+  | 1.2.0 | 8 casos nuevos, no vistos al ajustar | 100 % | 100 % |
+  | 1.2.0 | 50 (dos corridas seguidas) | 100 % | 100 % |
+
+  El dataset es nuestro y el prompt se ajustó mirando sus fallos; por eso se midieron los 8
+  casos nuevos antes de incorporarlos. La muestra es pequeña: conviene seguir ampliando el
+  dataset con frases reales del taller.
+- **Descripción de ítems en mayúscula inicial** ("cambio de aceite" → "Cambio de aceite"),
+  como en el ejemplo de la sección 7.4. Lo hace el código, no el prompt.
 
 ### Interfaces compartidas (sección 2 del reparto)
 

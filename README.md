@@ -73,7 +73,7 @@ Para nuevas e2e usa `createTestApp()`, `resetDatabase()` y `api()` de `test/e2e/
 Ninguna de estas pruebas llama al LLM real. El dataset dorado (`test/golden/`) se ejecuta aparte contra el modelo, con `FIREWORKS_API_KEY` en `.env`:
 
 ```bash
-npm run golden                        # corre los 42 casos y compara con la corrida anterior
+npm run golden                        # corre los 50 casos y compara con la corrida anterior
 npm run golden -- --only g-001,g-013  # solo esos casos
 ```
 
