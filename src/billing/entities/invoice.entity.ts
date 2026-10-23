@@ -23,6 +23,10 @@ export class Invoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Negocio dueño de la cuenta; NULL es la plataforma. Cada negocio solo ve las suyas.
+  @Column({ name: 'partner_id', type: 'uuid', nullable: true })
+  partnerId: string | null;
+
   @Column({ name: 'customer_id', type: 'uuid' })
   customerId: string;
 

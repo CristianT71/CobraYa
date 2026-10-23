@@ -203,7 +203,7 @@ describeWithDb('Restricciones del esquema (PostgreSQL)', () => {
         dataSource.query(
           `INSERT INTO customers (document_type, document_number, full_name) VALUES ('CC', '1032456789', 'Otro')`,
         ),
-      ).rejects.toThrow('uq_customers_document');
+      ).rejects.toThrow('uq_customers_scope_document');
     });
 
     it('sí admite el mismo número con otro tipo de documento', async () => {
