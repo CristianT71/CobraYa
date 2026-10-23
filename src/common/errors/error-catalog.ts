@@ -53,6 +53,12 @@ export const ERROR_CATALOG = {
   INVOICE_NOT_FOUND: { status: 'rejected', httpStatus: 404, business: true },
   RECEIPT_NOT_FOUND: { status: 'rejected', httpStatus: 404, business: true },
   // Errores de plataforma (secciones 7.5 y 10.1). Pendientes de registrar en el contrato.
+  // Canal de negocios (A2A) y administración de negocios. Pendientes de registrar en el contrato.
+  SKILL_NOT_ALLOWED: { status: 'rejected', httpStatus: 403 },
+  RATE_LIMITED: { status: 'rejected', httpStatus: 429 },
+  QUOTA_EXCEEDED: { status: 'rejected', httpStatus: 429 },
+  PARTNER_EXISTS: { status: 'rejected', httpStatus: 409 },
+  PARTNER_NOT_FOUND: { status: 'rejected', httpStatus: 404 },
   VALIDATION_ERROR: { status: 'rejected', httpStatus: 400 },
   UNAUTHORIZED: { status: 'rejected', httpStatus: 401 },
   NOT_FOUND: { status: 'rejected', httpStatus: 404 },

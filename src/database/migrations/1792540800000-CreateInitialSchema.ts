@@ -1,14 +1,14 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateInitialSchema1792540800000 implements MigrationInterface {
-    name = 'CreateInitialSchema1792540800000';
+  name = 'CreateInitialSchema1792540800000';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        // Secuencia del consecutivo interno de comprobantes
-        await queryRunner.query(`CREATE SEQUENCE receipt_number_seq START 1`);
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    // Secuencia del consecutivo interno de comprobantes
+    await queryRunner.query(`CREATE SEQUENCE receipt_number_seq START 1`);
 
-        // customers
-        await queryRunner.query(`
+    // customers
+    await queryRunner.query(`
         CREATE TABLE customers (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
         document_type varchar(3) NOT NULL,
@@ -22,8 +22,8 @@ export class CreateInitialSchema1792540800000 implements MigrationInterface {
         )
     `);
 
-        // invoices (cuentas de cobro)
-        await queryRunner.query(`
+    // invoices (cuentas de cobro)
+    await queryRunner.query(`
         CREATE TABLE invoices (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
         customer_id uuid NOT NULL,
@@ -48,10 +48,12 @@ export class CreateInitialSchema1792540800000 implements MigrationInterface {
         CONSTRAINT ck_invoices_total_non_negative CHECK (total >= 0)
         )
     `);
-        await queryRunner.query(`CREATE INDEX idx_invoices_customer_id ON invoices (customer_id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_invoices_customer_id ON invoices (customer_id)`,
+    );
 
-        // invoice_items
-        await queryRunner.query(`
+    // invoice_items
+    await queryRunner.query(`
         CREATE TABLE invoice_items (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
         invoice_id uuid NOT NULL,
@@ -66,10 +68,12 @@ export class CreateInitialSchema1792540800000 implements MigrationInterface {
         CONSTRAINT ck_invoice_items_line_total_non_negative CHECK (line_total >= 0)
         )
     `);
-        await queryRunner.query(`CREATE INDEX idx_invoice_items_invoice_id ON invoice_items (invoice_id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_invoice_items_invoice_id ON invoice_items (invoice_id)`,
+    );
 
-        // payments (pagos simulados)
-        await queryRunner.query(`
+    // payments (pagos simulados)
+    await queryRunner.query(`
         CREATE TABLE payments (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
         invoice_id uuid NOT NULL,
@@ -84,10 +88,12 @@ export class CreateInitialSchema1792540800000 implements MigrationInterface {
         CONSTRAINT ck_payments_status CHECK (status IN ('APPLIED'))
         )
     `);
-        await queryRunner.query(`CREATE INDEX idx_payments_invoice_id ON payments (invoice_id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_payments_invoice_id ON payments (invoice_id)`,
+    );
 
-        // receipts (comprobantes)
-        await queryRunner.query(`
+    // receipts (comprobantes)
+    await queryRunner.query(`
         CREATE TABLE receipts (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
         invoice_id uuid NOT NULL,
@@ -100,10 +106,12 @@ export class CreateInitialSchema1792540800000 implements MigrationInterface {
         CONSTRAINT uq_receipts_receipt_number UNIQUE (receipt_number)
         )
     `);
-        await queryRunner.query(`ALTER SEQUENCE receipt_number_seq OWNED BY receipts.receipt_number`);
+    await queryRunner.query(
+      `ALTER SEQUENCE receipt_number_seq OWNED BY receipts.receipt_number`,
+    );
 
-        // llm_call_logs (bitácora del LLM; sin llave foránea, se enlaza por request_id)
-        await queryRunner.query(`
+    // llm_call_logs (bitácora del LLM; sin llave foránea, se enlaza por request_id)
+    await queryRunner.query(`
         CREATE TABLE llm_call_logs (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
         request_id varchar(64) NOT NULL,
@@ -122,16 +130,18 @@ export class CreateInitialSchema1792540800000 implements MigrationInterface {
         CONSTRAINT ck_llm_call_logs_attempts CHECK (attempts IN (1, 2))
         )
     `);
-        await queryRunner.query(`CREATE INDEX idx_llm_call_logs_request_id ON llm_call_logs (request_id)`);
-    }
+    await queryRunner.query(
+      `CREATE INDEX idx_llm_call_logs_request_id ON llm_call_logs (request_id)`,
+    );
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`DROP TABLE IF EXISTS llm_call_logs`);
-        await queryRunner.query(`DROP TABLE IF EXISTS receipts`);
-        await queryRunner.query(`DROP TABLE IF EXISTS payments`);
-        await queryRunner.query(`DROP TABLE IF EXISTS invoice_items`);
-        await queryRunner.query(`DROP TABLE IF EXISTS invoices`);
-        await queryRunner.query(`DROP TABLE IF EXISTS customers`);
-        await queryRunner.query(`DROP SEQUENCE IF EXISTS receipt_number_seq`);
-    }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP TABLE IF EXISTS llm_call_logs`);
+    await queryRunner.query(`DROP TABLE IF EXISTS receipts`);
+    await queryRunner.query(`DROP TABLE IF EXISTS payments`);
+    await queryRunner.query(`DROP TABLE IF EXISTS invoice_items`);
+    await queryRunner.query(`DROP TABLE IF EXISTS invoices`);
+    await queryRunner.query(`DROP TABLE IF EXISTS customers`);
+    await queryRunner.query(`DROP SEQUENCE IF EXISTS receipt_number_seq`);
+  }
 }

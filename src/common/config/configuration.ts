@@ -4,6 +4,8 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export interface AppConfig {
   port: number;
+  /** Proxies delante del servicio; 0 = no confiar en X-Forwarded-For. */
+  trustProxy: number;
   database: { url: string };
   security: { serviceApiKey: string };
   llm: {
@@ -12,6 +14,14 @@ export interface AppConfig {
     model: string;
     timeoutMs: number;
     maxTokens: number;
+  };
+  partners: {
+    /** Secreto del servidor con el que se calcula el hash de las keys de los negocios. */
+    keyPepper: string;
+  };
+  a2a: {
+    /** URL pública del servicio, sin barra final; es la que anuncia la tarjeta del bot. */
+    publicBaseUrl: string;
   };
   billing: {
     /** Decimal como texto (por ejemplo "0.19"); se convierte con decimal.js en el dominio. */
@@ -40,6 +50,7 @@ export default function configuration(): AppConfig {
   const env = process.env;
   return {
     port: env.PORT ? Number(env.PORT) : DEFAULTS.port,
+    trustProxy: env.TRUST_PROXY ? Number(env.TRUST_PROXY) : 0,
     database: { url: env.DATABASE_URL ?? '' },
     security: { serviceApiKey: env.SERVICE_API_KEY ?? '' },
     llm: {
@@ -52,6 +63,13 @@ export default function configuration(): AppConfig {
       maxTokens: env.LLM_MAX_TOKENS
         ? Number(env.LLM_MAX_TOKENS)
         : DEFAULTS.llmMaxTokens,
+    },
+    partners: { keyPepper: env.PARTNER_KEY_PEPPER ?? '' },
+    a2a: {
+      publicBaseUrl: (
+        env.A2A_PUBLIC_BASE_URL ||
+        `http://localhost:${env.PORT ? Number(env.PORT) : DEFAULTS.port}`
+      ).replace(/\/+$/, ''),
     },
     billing: {
       taxRate: env.TAX_RATE || DEFAULTS.taxRate,

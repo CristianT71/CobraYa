@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import {
+import OpenAI, {
   APIConnectionError,
   APIConnectionTimeoutError,
   APIError,
@@ -10,6 +10,7 @@ import type {
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions';
 import { z } from 'zod';
+import { CircuitBreaker } from './circuit-breaker';
 import {
   EXTRACTION_SYSTEM_PROMPT,
   PROMPT_VERSION,
@@ -46,6 +47,45 @@ export interface FireworksExtractorOptions {
   maxTokens: number;
   // Esperas antes de cada reintento por red, timeout, 5xx o 429.
   retryDelaysMs?: number[];
+  // Corta las llamadas cuando Fireworks está caído. Una sola instancia por
+  // adaptador: su estado se comparte entre solicitudes.
+  breaker?: CircuitBreaker;
+}
+
+// Datos de conexión a Fireworks, tal como salen de la configuración (llm.*).
+export interface FireworksConnection {
+  apiKey: string;
+  baseUrl: string;
+  timeoutMs: number;
+  model: string;
+  maxTokens: number;
+}
+
+// Único lugar que construye el cliente del SDK `openai`. Los reintentos los hace
+// el adaptador con su propia política (sección 9.2), no el SDK.
+export function createFireworksExtractor(
+  connection: FireworksConnection,
+  recorder?: LlmCallRecorder,
+): FireworksExtractorAdapter {
+  const client = new OpenAI({
+    apiKey: connection.apiKey,
+    baseURL: connection.baseUrl,
+    timeout: connection.timeoutMs,
+    maxRetries: 0,
+  });
+  return new FireworksExtractorAdapter(
+    { create: (params) => client.chat.completions.create(params) },
+    { model: connection.model, maxTokens: connection.maxTokens },
+    recorder,
+  );
+}
+
+// La llamada se rechazó sin tocar a Fireworks porque el circuito está abierto.
+class CircuitOpenError extends Error {
+  constructor() {
+    super('Circuito abierto: Fireworks no responde; llamadas suspendidas');
+    this.name = 'CircuitOpenError';
+  }
 }
 
 interface Usage {
@@ -59,6 +99,7 @@ type ParseResult =
 export class FireworksExtractorAdapter implements LlmExtractorPort {
   private readonly logger = new Logger(FireworksExtractorAdapter.name);
   private readonly retryDelaysMs: number[];
+  private readonly breaker: CircuitBreaker;
 
   constructor(
     private readonly client: ChatCompletionClient,
@@ -68,6 +109,7 @@ export class FireworksExtractorAdapter implements LlmExtractorPort {
       new Promise((resolve) => setTimeout(resolve, ms)),
   ) {
     this.retryDelaysMs = options.retryDelaysMs ?? [500, 1_500];
+    this.breaker = options.breaker ?? new CircuitBreaker();
   }
 
   async extract(
@@ -99,7 +141,7 @@ export class FireworksExtractorAdapter implements LlmExtractorPort {
     let lastError = '';
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        rawOutput = await this.completeWithRetry(messages, usage);
+        rawOutput = await this.completeGuarded(messages, usage);
       } catch (error) {
         const unavailable = toUnavailableError(error);
         await record({
@@ -125,6 +167,25 @@ export class FireworksExtractorAdapter implements LlmExtractorPort {
 
     await record({ parsedOk: false, attempts: MAX_ATTEMPTS, error: lastError });
     throw new ExtractionFailedError();
+  }
+
+  // Pasa por el circuito: si Fireworks lleva varias solicitudes seguidas sin
+  // responder, falla de inmediato en vez de esperar timeouts y reintentos.
+  private async completeGuarded(
+    messages: ChatCompletionMessageParam[],
+    usage: Usage,
+  ): Promise<string> {
+    if (!this.breaker.canAttempt()) throw new CircuitOpenError();
+    try {
+      const output = await this.completeWithRetry(messages, usage);
+      this.breaker.recordSuccess();
+      return output;
+    } catch (error) {
+      // Solo la indisponibilidad del proveedor cuenta; un 401 o un 400 no.
+      if (isRetryable(error)) this.breaker.recordFailure();
+      else this.breaker.release();
+      throw error;
+    }
   }
 
   private async completeWithRetry(
@@ -217,6 +278,9 @@ function retryDelay(error: unknown, defaultMs: number): number {
 }
 
 function toUnavailableError(error: unknown): LlmUnavailableError {
+  if (error instanceof CircuitOpenError) {
+    return new LlmUnavailableError(error.message, false, { cause: error });
+  }
   if (error instanceof APIConnectionTimeoutError) {
     return new LlmUnavailableError('El modelo no respondió a tiempo', true, {
       cause: error,

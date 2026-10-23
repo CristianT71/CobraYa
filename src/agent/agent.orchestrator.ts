@@ -27,7 +27,10 @@ import {
 export interface AgentRequest {
   text: string;
   requestId: string;
-  idempotencyKey: string;
+  // Obligatoria solo para crear o pagar; las consultas no la necesitan.
+  idempotencyKey?: string;
+  // Negocio que hace la solicitud (canal A2A); sin él es el operador.
+  partnerId?: string;
 }
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -100,9 +103,15 @@ export class AgentOrchestrator {
     extraction: Extraction,
     request: AgentRequest,
   ): Promise<AgentResponseDto> {
-    const customer = await this.resolveCustomer(extraction);
+    const idempotencyKey = requireIdempotencyKey(request);
+    const customer = await this.resolveCustomer(extraction, request.partnerId);
     const result = await this.billing.createInvoice(
-      toCreateInvoiceCommand(extraction, customer.id, request.idempotencyKey),
+      toCreateInvoiceCommand(
+        extraction,
+        customer.id,
+        idempotencyKey,
+        request.partnerId,
+      ),
     );
     const message = result.payment
       ? `Cuenta de cobro creada y pagada ${PAYMENT_METHOD_LABELS[result.payment.method]}.`
@@ -118,11 +127,17 @@ export class AgentOrchestrator {
     extraction: Extraction,
     request: AgentRequest,
   ): Promise<AgentResponseDto> {
+    const idempotencyKey = requireIdempotencyKey(request);
     const invoiceId =
       extraction.related_ids.invoice_id ??
-      (await this.findSinglePendingInvoice(extraction));
+      (await this.findSinglePendingInvoice(extraction, request.partnerId));
     const result = await this.billing.registerPayment(
-      toRegisterPaymentCommand(extraction, invoiceId, request.idempotencyKey),
+      toRegisterPaymentCommand(
+        extraction,
+        invoiceId,
+        idempotencyKey,
+        request.partnerId,
+      ),
     );
     const method = result.payment?.method ?? extraction.payment.method!;
     return AgentResponseDto.completed(
@@ -136,7 +151,9 @@ export class AgentOrchestrator {
     extraction: Extraction,
     request: AgentRequest,
   ): Promise<AgentResponseDto> {
-    const result = await this.billing.getReceipt(toGetReceiptQuery(extraction));
+    const result = await this.billing.getReceipt(
+      toGetReceiptQuery(extraction, request.partnerId),
+    );
     const number = result.receipt?.receipt_number;
     return AgentResponseDto.completed(
       request.requestId,
@@ -148,6 +165,7 @@ export class AgentOrchestrator {
   // RN-01 y RN-02: el cliente debe existir y ser uno solo.
   private async resolveCustomer(
     extraction: Extraction,
+    partnerId?: string,
   ): Promise<CustomerSummary> {
     const documentNumber = normalizeDocumentNumber(
       extraction.customer.document_number,
@@ -162,6 +180,7 @@ export class AgentOrchestrator {
     const matches = await this.customers.findByDocument(
       extraction.customer.document_type,
       documentNumber,
+      partnerId,
     );
     if (matches.length === 0) throw new AgentOutcomeError('CUSTOMER_NOT_FOUND');
     if (matches.length > 1) {
@@ -175,9 +194,13 @@ export class AgentOrchestrator {
   // RN-08: sin invoice_id, el cliente debe tener exactamente una cuenta PENDING.
   private async findSinglePendingInvoice(
     extraction: Extraction,
+    partnerId?: string,
   ): Promise<string> {
-    const customer = await this.resolveCustomer(extraction);
-    const pending = await this.billing.findPendingInvoiceIds(customer.id);
+    const customer = await this.resolveCustomer(extraction, partnerId);
+    const pending = await this.billing.findPendingInvoiceIds(
+      customer.id,
+      partnerId,
+    );
     if (pending.length === 1) return pending[0];
     throw new AgentOutcomeError(
       'MISSING_FIELDS',
@@ -187,6 +210,18 @@ export class AgentOrchestrator {
       ['related_ids.invoice_id'],
     );
   }
+}
+
+// Crear o pagar exige Idempotency-Key (contrato, sección 7.1); consultar no.
+function requireIdempotencyKey(request: AgentRequest): string {
+  if (!request.idempotencyKey) {
+    throw new AgentOutcomeError(
+      'MISSING_FIELDS',
+      'Falta el encabezado Idempotency-Key para crear o pagar.',
+      ['Idempotency-Key'],
+    );
+  }
+  return request.idempotencyKey;
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -216,12 +251,17 @@ function missingFieldsMessage(fields: string[]): string {
 }
 
 // Las respuestas solo devuelven el documento enmascarado (contrato, sección 10.1).
+// billing ya devuelve el documento enmascarado; aquí solo se enmascara si llegó
+// completo, sin volver a tocar uno ya enmascarado (****6789 quedaría ****).
 function maskCustomer(result: InvoiceResultData): InvoiceResultData {
+  const documentNumber = result.customer.document_number;
   return {
     ...result,
     customer: {
       ...result.customer,
-      document_number: maskDigits(result.customer.document_number),
+      document_number: documentNumber.startsWith('****')
+        ? documentNumber
+        : maskDigits(documentNumber),
     },
   };
 }

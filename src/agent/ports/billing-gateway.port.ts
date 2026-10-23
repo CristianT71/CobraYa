@@ -19,6 +19,8 @@ export interface CreateInvoiceCommand {
   idempotencyKey: string;
   source: 'agent' | 'direct';
   externalRef: string | null;
+  // Negocio dueño de la cuenta; sin él (o null) es la plataforma.
+  partnerId?: string | null;
 }
 
 export interface RegisterPaymentCommand {
@@ -27,14 +29,21 @@ export interface RegisterPaymentCommand {
   // Vacío → el código usa el total (RN-06).
   amount: string | null;
   idempotencyKey: string;
+  // Con negocio, solo cuentas de ese negocio; sin él, sin restricción (operador).
+  partnerId?: string;
 }
 
-export type GetReceiptQuery = { receiptNumber: number } | { invoiceId: string };
+export type GetReceiptQuery = (
+  { receiptNumber: number } | { invoiceId: string }
+) & { partnerId?: string };
 
 export interface BillingGateway {
   createInvoice(command: CreateInvoiceCommand): Promise<InvoiceResultData>;
   registerPayment(command: RegisterPaymentCommand): Promise<InvoiceResultData>;
   getReceipt(query: GetReceiptQuery): Promise<InvoiceResultData>;
   // Para RN-08: pagar sin invoice_id exige exactamente una cuenta PENDING.
-  findPendingInvoiceIds(customerId: string): Promise<string[]>;
+  findPendingInvoiceIds(
+    customerId: string,
+    partnerId?: string,
+  ): Promise<string[]>;
 }

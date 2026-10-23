@@ -100,7 +100,11 @@ describe('AgentOrchestrator', () => {
       expect(extractor.calls).toEqual([
         { text: REQUEST.text, context: { requestId: REQUEST.requestId } },
       ]);
-      expect(customers.findByDocument).toHaveBeenCalledWith('CC', '1032456789');
+      expect(customers.findByDocument).toHaveBeenCalledWith(
+        'CC',
+        '1032456789',
+        undefined,
+      );
       expect(billing.createInvoice).toHaveBeenCalledWith(
         expect.objectContaining({
           customerId: 'cust-1',
@@ -118,6 +122,20 @@ describe('AgentOrchestrator', () => {
         },
         missing_fields: [],
         request_id: REQUEST.requestId,
+      });
+    });
+
+    it('no vuelve a enmascarar un documento que billing ya devolvió enmascarado', async () => {
+      const { orchestrator, billing } = setup();
+      billing.createInvoice.mockResolvedValue({
+        ...PAID_INVOICE,
+        customer: { ...PAID_INVOICE.customer, document_number: '****6789' },
+      });
+
+      const response = await orchestrator.handle(REQUEST);
+
+      expect(response.data).toMatchObject({
+        customer: { document_number: '****6789' },
       });
     });
 
@@ -150,6 +168,24 @@ describe('AgentOrchestrator', () => {
         request_id: REQUEST.requestId,
       });
       expect(customers.findByDocument).not.toHaveBeenCalled();
+      expectNoWrites(billing);
+    });
+
+    it('si el texto no dice el precio de un ítem pide ese dato y no escribe nada', async () => {
+      const { orchestrator, billing } = setup({
+        ...MOCK_EXTRACTIONS.completeInvoice,
+        items: [
+          { description: 'Cambio de aceite', quantity: 1, unit_price: '' },
+        ],
+      });
+
+      const response = await orchestrator.handle(REQUEST);
+
+      expect(response).toMatchObject({
+        status: 'needs_clarification',
+        data: null,
+        missing_fields: ['items[0].unit_price'],
+      });
       expectNoWrites(billing);
     });
 
@@ -225,7 +261,10 @@ describe('AgentOrchestrator', () => {
 
       const response = await orchestrator.handle(REQUEST);
 
-      expect(billing.findPendingInvoiceIds).toHaveBeenCalledWith('cust-1');
+      expect(billing.findPendingInvoiceIds).toHaveBeenCalledWith(
+        'cust-1',
+        undefined,
+      );
       expect(billing.registerPayment).toHaveBeenCalledWith({
         invoiceId: INVOICE_ID,
         method: 'transfer',
@@ -290,6 +329,125 @@ describe('AgentOrchestrator', () => {
         message: 'Comprobante 1 encontrado.',
       });
       expectNoWrites(billing);
+    });
+  });
+
+  describe('con un negocio (canal A2A)', () => {
+    const PARTNER = '11111111-1111-4111-8111-111111111111';
+    const asPartner = { ...REQUEST, partnerId: PARTNER };
+
+    it('busca al cliente dentro del negocio y crea la cuenta a nombre del negocio', async () => {
+      const { orchestrator, customers, billing } = setup();
+
+      await orchestrator.handle(asPartner);
+
+      expect(customers.findByDocument).toHaveBeenCalledWith(
+        'CC',
+        '1032456789',
+        PARTNER,
+      );
+      expect(billing.createInvoice).toHaveBeenCalledWith(
+        expect.objectContaining({ partnerId: PARTNER }),
+      );
+    });
+
+    it('registra el pago y busca las cuentas pendientes solo del negocio', async () => {
+      const { orchestrator, billing } = setup({
+        ...MOCK_EXTRACTIONS.completeInvoice,
+        intent: 'register_payment',
+        items: [],
+        payment: { method: 'transfer', amount: null },
+      });
+
+      await orchestrator.handle(asPartner);
+
+      expect(billing.findPendingInvoiceIds).toHaveBeenCalledWith(
+        'cust-1',
+        PARTNER,
+      );
+      expect(billing.registerPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ partnerId: PARTNER }),
+      );
+    });
+
+    it('consulta el comprobante solo dentro del negocio', async () => {
+      const { orchestrator, billing } = setup({
+        ...MOCK_EXTRACTIONS.unknownIntent,
+        intent: 'get_receipt',
+        related_ids: {
+          invoice_id: null,
+          receipt_number: 1,
+          external_ref: null,
+        },
+      });
+
+      await orchestrator.handle(asPartner);
+
+      expect(billing.getReceipt).toHaveBeenCalledWith({
+        receiptNumber: 1,
+        partnerId: PARTNER,
+      });
+    });
+
+    it('sin negocio no agrega partnerId a los comandos (operador)', async () => {
+      const { orchestrator, billing } = setup();
+
+      await orchestrator.handle(REQUEST);
+
+      const [command] = billing.createInvoice.mock.calls[0] as [
+        Record<string, unknown>,
+      ];
+      expect(command).not.toHaveProperty('partnerId');
+    });
+  });
+
+  describe('Idempotency-Key opcional', () => {
+    const withoutKey = { ...REQUEST, idempotencyKey: undefined };
+
+    it('crear una cuenta sin clave pide la clave y no escribe nada', async () => {
+      const { orchestrator, customers, billing } = setup();
+
+      const response = await orchestrator.handle(withoutKey);
+
+      expect(response).toMatchObject({
+        status: 'needs_clarification',
+        missing_fields: ['Idempotency-Key'],
+      });
+      expect(customers.findByDocument).not.toHaveBeenCalled();
+      expectNoWrites(billing);
+    });
+
+    it('registrar un pago sin clave también la pide', async () => {
+      const { orchestrator, billing } = setup({
+        ...MOCK_EXTRACTIONS.completeInvoice,
+        intent: 'register_payment',
+        items: [],
+        payment: { method: 'cash', amount: null },
+      });
+
+      const response = await orchestrator.handle(withoutKey);
+
+      expect(response).toMatchObject({
+        status: 'needs_clarification',
+        missing_fields: ['Idempotency-Key'],
+      });
+      expectNoWrites(billing);
+    });
+
+    it('consultar un comprobante no necesita clave', async () => {
+      const { orchestrator } = setup({
+        ...MOCK_EXTRACTIONS.unknownIntent,
+        intent: 'get_receipt',
+        related_ids: {
+          invoice_id: null,
+          receipt_number: 1,
+          external_ref: null,
+        },
+      });
+
+      const response = await orchestrator.handle(withoutKey);
+
+      expect(response.status).toBe('completed');
     });
   });
 

@@ -7,11 +7,11 @@ import { Invoice } from '../entities/invoice.entity';
  * sobre el lado opcional de un LEFT JOIN. Los ítems y pagos se leen después.
  */
 export function lockInvoiceById(
-    manager: EntityManager,
-    invoiceId: string,
+  manager: EntityManager,
+  invoiceId: string,
 ): Promise<Invoice | null> {
-    return manager.getRepository(Invoice).findOne({
-        where: { id: invoiceId },
-        lock: { mode: 'pessimistic_write' },
-    });
+  return manager.getRepository(Invoice).findOne({
+    where: { id: invoiceId },
+    lock: { mode: 'pessimistic_write' },
+  });
 }

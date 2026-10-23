@@ -1,4 +1,14 @@
-import {Column,CreateDateColumn,Entity,JoinColumn,ManyToOne,OneToMany,OneToOne,PrimaryGeneratedColumn,UpdateDateColumn,} from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  OneToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import type { Relation } from 'typeorm';
 import { Customer } from '../../customers/customer.entity';
 import { InvoiceItem } from './invoice-item.entity';
@@ -10,53 +20,64 @@ export type InvoiceSource = 'agent' | 'direct';
 
 @Entity('invoices')
 export class Invoice {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column({ name: 'customer_id', type: 'uuid' })
-    customerId: string;
+  // Negocio dueño de la cuenta; NULL es la plataforma. Cada negocio solo ve las suyas.
+  @Column({ name: 'partner_id', type: 'uuid', nullable: true })
+  partnerId: string | null;
 
-    @ManyToOne(() => Customer, { nullable: false })
-    @JoinColumn({ name: 'customer_id' })
-    customer: Relation<Customer>;
+  @Column({ name: 'customer_id', type: 'uuid' })
+  customerId: string;
 
-    @Column({ type: 'varchar', length: 10, default: 'PENDING' })
-    status: InvoiceStatusValue;
+  @ManyToOne(() => Customer, { nullable: false })
+  @JoinColumn({ name: 'customer_id' })
+  customer: Relation<Customer>;
 
-    // numeric llega como string desde pg: se mantiene así para usar decimal.js
-    @Column({ type: 'numeric', precision: 14, scale: 2 })
-    subtotal: string;
+  @Column({ type: 'varchar', length: 10, default: 'PENDING' })
+  status: InvoiceStatusValue;
 
-    @Column({ name: 'tax_rate', type: 'numeric', precision: 5, scale: 4 })
-    taxRate: string;
+  // numeric llega como string desde pg: se mantiene así para usar decimal.js
+  @Column({ type: 'numeric', precision: 14, scale: 2 })
+  subtotal: string;
 
-    @Column({ name: 'tax_amount', type: 'numeric', precision: 14, scale: 2 })
-    taxAmount: string;
+  @Column({ name: 'tax_rate', type: 'numeric', precision: 5, scale: 4 })
+  taxRate: string;
 
-    @Column({ type: 'numeric', precision: 14, scale: 2 })
-    total: string;
+  @Column({ name: 'tax_amount', type: 'numeric', precision: 14, scale: 2 })
+  taxAmount: string;
 
-    @Column({ name: 'idempotency_key', type: 'varchar', length: 100, unique: true })
-    idempotencyKey: string;
+  @Column({ type: 'numeric', precision: 14, scale: 2 })
+  total: string;
 
-    @Column({ type: 'varchar', length: 10 })
-    source: InvoiceSource;
+  @Column({
+    name: 'idempotency_key',
+    type: 'varchar',
+    length: 100,
+    unique: true,
+  })
+  idempotencyKey: string;
 
-    @Column({ name: 'external_ref', type: 'varchar', length: 60, nullable: true })
-    externalRef: string | null;
+  @Column({ type: 'varchar', length: 10 })
+  source: InvoiceSource;
 
-    @OneToMany(() => InvoiceItem, (item) => item.invoice, { cascade: ['insert'] })
-    items: Relation<InvoiceItem[]>;
+  @Column({ name: 'external_ref', type: 'varchar', length: 60, nullable: true })
+  externalRef: string | null;
 
-    @OneToMany(() => Payment, (payment) => payment.invoice, { cascade: ['insert'] })
-    payments: Relation<Payment[]>;
+  @OneToMany(() => InvoiceItem, (item) => item.invoice, { cascade: ['insert'] })
+  items: Relation<InvoiceItem[]>;
 
-    @OneToOne(() => Receipt, (receipt) => receipt.invoice)
-    receipt: Relation<Receipt> | null;
+  @OneToMany(() => Payment, (payment) => payment.invoice, {
+    cascade: ['insert'],
+  })
+  payments: Relation<Payment[]>;
 
-    @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-    createdAt: Date;
+  @OneToOne(() => Receipt, (receipt) => receipt.invoice)
+  receipt: Relation<Receipt> | null;
 
-    @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-    updatedAt: Date;
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt: Date;
 }

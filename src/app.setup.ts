@@ -6,7 +6,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ServiceApiKeyGuard } from './common/guards/service-api-key.guard';
 import { RequestIdInterceptor } from './common/interceptors/request-id.interceptor';
 
-export const CONTRACT_VERSION = '1.0.0';
+export const CONTRACT_VERSION = '1.1.0';
 export const SWAGGER_PATH = 'docs';
 
 /**
@@ -43,6 +43,14 @@ export function setupSwagger(app: INestApplication): void {
     )
     .setVersion(CONTRACT_VERSION)
     .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        description: 'Key de un negocio (fac_…)',
+      },
+      'partner-key',
+    )
     .addSecurityRequirements('api-key')
     .build();
   const document = SwaggerModule.createDocument(app, config);

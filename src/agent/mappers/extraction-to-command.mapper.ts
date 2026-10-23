@@ -32,6 +32,12 @@ function quantityToDecimal(quantity: number): string | null {
   return AMOUNT_REGEX.test(text) ? text : null;
 }
 
+// El modelo devuelve la descripción tal como la escribió el usuario ("cambio de
+// aceite"); el comprobante la muestra con la primera letra en mayúscula.
+function capitalize(text: string): string {
+  return text.charAt(0).toLocaleUpperCase('es') + text.slice(1);
+}
+
 function isAmount(value: string | null): value is string {
   return value !== null && AMOUNT_REGEX.test(value);
 }
@@ -129,12 +135,13 @@ export function toCreateInvoiceCommand(
   extraction: Extraction,
   customerId: string,
   idempotencyKey: string,
+  partnerId?: string,
 ): CreateInvoiceCommand {
   const { method, amount } = extraction.payment;
   return {
     customerId,
     items: extraction.items.map((item) => ({
-      description: item.description.trim(),
+      description: capitalize(item.description.trim()),
       quantity: quantityToDecimal(item.quantity) as string,
       unitPrice: item.unit_price,
     })),
@@ -142,6 +149,7 @@ export function toCreateInvoiceCommand(
     idempotencyKey,
     source: 'agent',
     externalRef: extraction.related_ids.external_ref,
+    ...(partnerId !== undefined ? { partnerId } : {}),
   };
 }
 
@@ -149,18 +157,24 @@ export function toRegisterPaymentCommand(
   extraction: Extraction,
   invoiceId: string,
   idempotencyKey: string,
+  partnerId?: string,
 ): RegisterPaymentCommand {
   return {
     invoiceId,
     method: extraction.payment.method!,
     amount: extraction.payment.amount,
     idempotencyKey,
+    ...(partnerId !== undefined ? { partnerId } : {}),
   };
 }
 
-export function toGetReceiptQuery(extraction: Extraction): GetReceiptQuery {
+export function toGetReceiptQuery(
+  extraction: Extraction,
+  partnerId?: string,
+): GetReceiptQuery {
   const { receipt_number, invoice_id } = extraction.related_ids;
+  const scope = partnerId !== undefined ? { partnerId } : {};
   return receipt_number !== null
-    ? { receiptNumber: receipt_number }
-    : { invoiceId: invoice_id! };
+    ? { receiptNumber: receipt_number, ...scope }
+    : { invoiceId: invoice_id!, ...scope };
 }

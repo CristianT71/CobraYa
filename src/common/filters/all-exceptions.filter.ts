@@ -28,7 +28,12 @@ interface Translated {
   httpStatus?: number;
 }
 
-const AGENT_PATH = /^\/agent(\/|$)/;
+const AGENT_PATH = /^\/(agent|a2a)(\/|$)/;
+// Solo el canal de negocios agrega `answer` (texto listo para mostrar) a sus respuestas.
+const A2A_PATH = /^\/a2a(\/|$)/;
+// Las descargas de PDF usan códigos HTTP reales (404, 403...): quien descarga un
+// archivo no espera un JSON con 200 que diga «rejected».
+const DOWNLOAD_PATH = /\/pdf$/;
 
 const HTTP_TO_CODE: Partial<Record<number, ErrorCode>> = {
   [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
@@ -49,7 +54,7 @@ const GENERIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
 
 /**
  * Traduce cualquier excepción al envoltorio de la sección 7.4 con
- * `data.error_code` (sección 9). En /agent/* los resultados de negocio
+ * `data.error_code` (sección 9). En /agent/* y /a2a/* los resultados de negocio
  * (rejected, needs_clarification) responden 200; en el camino directo usan
  * el código del catálogo (422, 409, etc.). Los fallos técnicos nunca exponen
  * detalles internos al supervisor.
@@ -83,7 +88,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const isBusinessResult = 'business' in entry;
     const httpStatus =
       t.httpStatus ??
-      (isBusinessResult && AGENT_PATH.test(req.path) ? 200 : entry.httpStatus);
+      (isBusinessResult &&
+      AGENT_PATH.test(req.path) &&
+      !DOWNLOAD_PATH.test(req.path)
+        ? 200
+        : entry.httpStatus);
 
     const body: ResponseEnvelope<{ error_code: ErrorCode } | null> = {
       status: entry.status,
@@ -94,6 +103,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       missing_fields: t.missingFields,
       request_id: requestId,
     };
+    const payload = A2A_PATH.test(req.path)
+      ? { ...body, answer: body.message }
+      : body;
 
     const log = {
       request_id: requestId,
@@ -114,7 +126,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (res.headersSent) return;
     res.setHeader(REQUEST_ID_HEADER, requestId);
-    res.status(httpStatus).json(body);
+    res.status(httpStatus).json(payload);
   }
 
   private translate(exception: unknown): Translated {
