@@ -36,6 +36,7 @@ import { InvoiceQueryService } from './queries/invoice-query.service';
   // Los tokens de los casos de uso también los usa el módulo agent.
   exports: [
     IdempotencyService,
+    InvoiceQueryService,
     TypeOrmModule,
     CREATE_INVOICE_USE_CASE,
     REGISTER_PAYMENT_USE_CASE,

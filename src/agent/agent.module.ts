@@ -42,5 +42,7 @@ import { BillingUseCasesGateway } from './ports/billing-use-cases.gateway';
     BillingUseCasesGateway,
     { provide: BILLING_GATEWAY, useExisting: BillingUseCasesGateway },
   ],
+  // El canal de negocios (a2a) usa el mismo orquestador para el lenguaje natural.
+  exports: [AgentOrchestrator],
 })
 export class AgentModule {}

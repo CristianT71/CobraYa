@@ -28,7 +28,7 @@ interface Translated {
   httpStatus?: number;
 }
 
-const AGENT_PATH = /^\/agent(\/|$)/;
+const AGENT_PATH = /^\/(agent|a2a)(\/|$)/;
 
 const HTTP_TO_CODE: Partial<Record<number, ErrorCode>> = {
   [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
@@ -49,7 +49,7 @@ const GENERIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
 
 /**
  * Traduce cualquier excepción al envoltorio de la sección 7.4 con
- * `data.error_code` (sección 9). En /agent/* los resultados de negocio
+ * `data.error_code` (sección 9). En /agent/* y /a2a/* los resultados de negocio
  * (rejected, needs_clarification) responden 200; en el camino directo usan
  * el código del catálogo (422, 409, etc.). Los fallos técnicos nunca exponen
  * detalles internos al supervisor.
