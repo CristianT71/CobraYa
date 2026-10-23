@@ -3,15 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
 import { Repository } from 'typeorm';
 import { CreateInvoiceDto } from '../dto/create-invoice.dto';
+import type { InvoiceResultData } from '../dto/invoice-result.dto';
 import { Invoice } from '../entities/invoice.entity';
+import { toInvoiceResultData } from '../mappers/invoice-result.mapper';
 
 const UNIQUE_VIOLATION_CODE = '23505';
 const IDEMPOTENCY_CONSTRAINT = 'uq_invoices_idempotency_key';
-
-export interface IdempotentCreateResult {
-    invoice: Invoice;
-    replayed: boolean;
-}
 
 @Injectable()
 export class IdempotencyService {
@@ -22,23 +19,22 @@ export class IdempotencyService {
 
     /**
      * Ejecuta la creación de la cuenta de forma idempotente (contrato, sección 7.6):
-     * - Clave nueva: ejecuta createInvoice y devuelve el resultado.
+     * - Clave nueva: ejecuta createInvoice y devuelve su resultado.
      * - Misma clave y mismo cuerpo: devuelve la cuenta original sin crear nada.
      * - Misma clave y cuerpo distinto: 409.
      */
     async executeCreateInvoice(
         idempotencyKey: string,
         dto: CreateInvoiceDto,
-        createInvoice: () => Promise<Invoice>,
-    ): Promise<IdempotentCreateResult> {
+        createInvoice: () => Promise<InvoiceResultData>,
+    ): Promise<InvoiceResultData> {
         const existing = await this.findInvoiceByKey(idempotencyKey);
         if (existing) {
             return this.replay(existing, dto);
         }
 
         try {
-            const invoice = await createInvoice();
-            return { invoice, replayed: false };
+            return await createInvoice();
         } catch (error) {
             if (!this.isIdempotencyViolation(error)) {
                 throw error;
@@ -59,18 +55,17 @@ export class IdempotencyService {
         });
     }
 
-    private replay(existing: Invoice, dto: CreateInvoiceDto): IdempotentCreateResult {
+    private replay(existing: Invoice, dto: CreateInvoiceDto): InvoiceResultData {
         if (!this.isSameRequest(existing, dto)) {
             throw new ConflictException(
                 'La Idempotency-Key ya se usó con un cuerpo distinto.',
             );
         }
-        return { invoice: existing, replayed: true };
+        return toInvoiceResultData(existing);
     }
 
     // Compara la petición repetida contra lo que quedó guardado.
     private isSameRequest(existing: Invoice, dto: CreateInvoiceDto): boolean {
-        // Cliente
         if (existing.customer.documentNumber !== dto.customer.document_number) {
             return false;
         }
@@ -81,7 +76,7 @@ export class IdempotencyService {
             return false;
         }
 
-        // Ítems (como conjunto: el orden no está garantizado en la base)
+        // Ítems como conjunto: el orden no está garantizado en la base.
         const stored = existing.items.map((item) =>
             this.itemKey(item.description, item.quantity, item.unitPrice),
         );
@@ -97,12 +92,11 @@ export class IdempotencyService {
             return false;
         }
 
-        // external_ref
         if ((dto.external_ref ?? null) !== existing.externalRef) {
             return false;
         }
 
-        // Pago: solo se compara si la petición trae uno
+        // Pago: solo se compara si la petición trae uno.
         if (dto.payment) {
             const payment = existing.payments[0];
             if (!payment || payment.method !== dto.payment.method) {
