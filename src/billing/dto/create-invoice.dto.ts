@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
     ArrayMinSize,
     IsArray,
+    IsDefined,
     IsIn,
     IsNumber,
     IsOptional,
@@ -68,6 +69,8 @@ export class InvoicePaymentInputDto {
 
 export class CreateInvoiceDto {
     @ApiProperty({ type: () => CustomerRefDto })
+    // Sin IsDefined, un cuerpo sin `customer` pasaba la validación y fallaba con 500.
+    @IsDefined()
     @ValidateNested()
     @Type(() => CustomerRefDto)
     customer: CustomerRefDto;
