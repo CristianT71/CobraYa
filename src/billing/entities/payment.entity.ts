@@ -25,6 +25,17 @@ export class Payment {
     @Column({ type: 'varchar', length: 10, default: 'APPLIED' })
     status: 'APPLIED';
 
+    // Clave del POST que registró el pago (sección 7.6). Nula en el pago que nace
+    // junto con la cuenta: ese se identifica por invoices.idempotency_key.
+    @Column({
+        name: 'idempotency_key',
+        type: 'varchar',
+        length: 100,
+        nullable: true,
+        unique: true,
+    })
+    idempotencyKey: string | null;
+
     @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
     createdAt: Date;
 }
