@@ -9,7 +9,7 @@ Proyecto educativo: no incluye facturación electrónica, DIAN ni pasarelas de p
 ## Requisitos
 
 - Node.js 24 LTS y npm
-- Docker con Docker Compose (para PostgreSQL local)
+- Docker con Docker Compose
 
 ## Puesta en marcha
 
