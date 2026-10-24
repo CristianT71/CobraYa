@@ -1,57 +1,56 @@
 # Ventas (grupo de Zaidy): qué esperamos de ustedes y qué reciben de nosotros
 
-Somos el único servicio que **cobra, reparte y lleva la contabilidad**. Esta hoja resume en una página lo que necesitamos de cada grupo y lo que ustedes reciben de nosotros. Todo sale del Instructivo 5 y del contrato 1.0; si algo del kit dice otra cosa, **manda el kit**. El diagrama completo está en [diagrama-secuencia-ventas.md](diagrama-secuencia-ventas.md).
+Somos el único servicio que **cobra, reparte y lleva la contabilidad**. Esta hoja resume en una página lo que necesitamos de cada grupo y lo que ustedes reciben de nosotros. Todo sale del contrato 1.0 del kit (`contrato/REGLAS.md` y `docs/contrato.md`); si algo no coincide, **manda el kit**. El diagrama completo está en [diagrama-secuencia-ventas.md](diagrama-secuencia-ventas.md).
 
 ## Para todos
 
-- **Credenciales:** cada cliente tiene su `client_id` y secreto; pedimos token en `POST /oauth/token` y lo usamos con sus alcances. Los secretos nos los pasan por un canal privado, no por el chat.
-- **`traza_id`** en cada llamada, para reconstruir la historia de la orden en la bitácora.
+- **Credenciales:** cada cliente tiene su `client_id` y secreto; pedimos token en `POST /oauth/token` (`client_credentials`, 3600 s) y lo usamos con sus alcances. Los secretos nos los pasan por un canal privado, no por el chat.
+- **`traza_id`** en cada llamada, para reconstruir la historia de la orden con `GET /bitacora`.
 - **`clave_idempotencia`** en lo que crea algo. Misma clave y mismos datos: misma respuesta. Misma clave y otros datos: `IDEMPOTENCIA_CONFLICTO`.
-- **Errores** con los códigos del contrato (`{ error: { codigo, mensaje, reintentable } }`), nunca texto libre.
-- **Dinero en pesos enteros.** Nada de decimales.
+- **Errores** del contrato: `{ error: { codigo, mensaje, reintentable } }` con `isError: true`.
+- **Dinero en pesos enteros.** El IVA se calcula por línea y se redondea al peso.
 
 ## Taller (Falla)
 
 **Esperamos que ustedes:**
-1. Llamen `crear_venta` con las líneas (cada una ligada a su reserva), el pagador o pagadores, la `clave_idempotencia`, la `traza_id` y la `url_notificacion`.
-2. Tomen **precio e IVA de la reserva**, no de la oferta. Si no coinciden, respondemos `PRECIO_NO_COINCIDE`.
-3. Dejen su dirección en nuestra lista de destinos permitidos (por ejemplo `http://taller:4101`). Si no, rechazamos la venta.
-4. Publiquen `POST /eventos` y **verifiquen la firma HMAC** de lo que les enviamos.
-5. Si un pago se rechaza, llamen `generar_cobro` para obtener un cobro nuevo.
+1. Llamen `crear_venta` con `orden_id`, `pagador` (`tipo`, `documento`, `nombre`, `retenedor`, `autorizacion`), `lineas`, `clave_idempotencia`, `traza_id` y `url_notificacion`.
+2. Manden en cada línea de repuesto el `reserva_id`, el SKU en `referencia`, y el **precio e IVA tal como quedaron en la reserva**. Si no coinciden: `PRECIO_NO_COINCIDE`.
+3. Facturen **solo servicios** (sin reserva) con beneficiario `taller`. Los repuestos los factura su proveedor.
+4. Dejen su dirección en `NOTIFICACIONES_PERMITIDAS` (por ejemplo `http://taller:4101`); si no, rechazamos la venta.
+5. Publiquen `POST /eventos` y **verifiquen la firma `X-Firma`**.
+6. Si un pago se rechaza, llamen `generar_cobro` para obtener un cobro nuevo.
+7. Con garantía: la venta del concesionario lleva `pagador.tipo = concesionario`, `pagador.autorizacion = GAR-…` y los repuestos con concepto `garantia` y precio 0.
 
 **Ustedes reciben de nosotros:**
-- La venta creada con el **enlace de pago** para el cliente.
-- `consultar_venta`, `consultar_liquidacion` y `anular_venta`.
-- El evento firmado **`venta.liquidada`** cuando el dinero queda repartido: ahí la orden pasa a reparación.
-- Un evento firmado si hay **compensación** (reserva vencida y reembolso): ahí deben cotizar de nuevo.
+- La venta en `pendiente_pago` con `url_pago` para el cliente.
+- `consultar_venta`, `consultar_liquidacion`, `generar_cobro` y `anular_venta` (solo si no está pagada).
+- Eventos firmados, **en este orden por venta**: `venta.pagada` y luego `venta.liquidada`; o `venta.pago_rechazado`; o `venta.reembolsada` (compensación: deben cotizar de nuevo).
 
 ## Tienda (José) y Concesionario (Emerson)
 
 Las dos publican las mismas herramientas de proveedor.
 
 **Esperamos que ustedes:**
-1. `consultar_reserva`: devuelvan el **precio congelado, la cantidad, el vencimiento y la orden** a la que pertenece. Con eso verificamos cada línea antes de cobrar.
-2. `confirmar_reserva`: la acepten **solo de Ventas** (alcance `proveedor.confirmar`), de forma idempotente, y programen el despacho.
-3. `liberar_reserva`: devuelvan las unidades al inventario. Ventas puede liberar incluso una reserva ya confirmada.
-4. Respondan con un **error claro cuando la reserva venció**, para que podamos compensar.
-5. Publiquen las rutas de laboratorio `/sandbox/vencer/:reserva_id` y `/sandbox/reabastecer` (solo con `SANDBOX=1`).
-6. **Concesionario:** es el único que entrega repuestos en **garantía**, con precio 0, reserva y número de autorización.
+1. `consultar_reserva` (alcance `proveedor.confirmar`): devuelvan `estado`, los `items` con `sku`, `cantidad`, `precio_unitario` e `iva_porcentaje`, y la `venta_id` si ya está confirmada. Con una `traza_id` distinta a la de la reserva: `NO_ENCONTRADO`.
+2. `confirmar_reserva`: la acepten **solo de Ventas**, de forma idempotente (repetida con la misma venta no cambia nada), y devuelvan la guía de despacho. Reserva vencida: `RESERVA_VENCIDA`; otro estado: `ESTADO_INVALIDO`.
+3. `liberar_reserva`: devuelvan las unidades al inventario. Una reserva confirmada **solo la libera Ventas**.
+4. Publiquen `POST /sandbox/vencer/:reserva_id` y `POST /sandbox/reabastecer` (solo con `SANDBOX=1` y `X-Sandbox-Llave`).
+5. **Concesionario:** es el único que entrega repuestos en **garantía**, con precio 0 y número de autorización `GAR-…`.
 
 **Ustedes reciben de nosotros:**
-- Llamadas con token y alcance de Ventas, siempre con `traza_id`.
+- Llamadas con el token del cliente `ventas`, siempre con `traza_id`.
 - `confirmar_reserva` solo después de que el pago esté **aprobado y verificado**, nunca antes.
-- `liberar_reserva` de las demás reservas si la venta se compensa.
+- `liberar_reserva` de las reservas de la venta si hay que compensar.
 
 ## Qué NO hacemos
 
-- No cobramos antes de verificar las reservas contra ustedes.
+- No cobramos antes de verificar cada línea contra la reserva real.
 - No dispersamos dinero si algo no cuadra: la venta queda `en_revision` hasta que una persona la revise.
 - Ningún agente de IA nuestro crea, cambia ni anula ventas: lo decide el código.
 
-## Por confirmar entre los cuatro (se resuelve con el kit)
+## Pendiente entre los cuatro
 
-- Nombre exacto del evento de compensación y los campos de cada evento.
-- Código exacto del error cuando una reserva venció.
-- Forma exacta de la `url_notificacion` y de los pagadores (cliente y concesionario en garantía).
+- Que los secretos de los clientes (`taller` → ventas, `ventas` → proveedores, `auditor`) se intercambien por un canal privado.
+- Acordar las direcciones reales de cada servicio para la integración (no `localhost`).
 
 Contacto técnico de Ventas: Zaidy.
