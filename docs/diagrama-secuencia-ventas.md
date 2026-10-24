@@ -1,176 +1,195 @@
-# Diagrama de secuencia: Ventas y contabilidad frente a los demás servicios
+# Cómo funciona Ventas (grupo de Zaidy) frente a los demás
 
-Servicio del grupo de Zaidy dentro de MotorRed (Instructivo N.° 5). Ventas es el **orquestador comercial**: arma la venta, cobra, confirma a los proveedores, liquida, dispersa el dinero y lleva los asientos. Es el único que mueve dinero.
+**En una frase:** Ventas es la **caja** del ecosistema. El taller le pide cobrar una reparación, Ventas cobra al cliente, avisa a las tiendas que despachen, **reparte el dinero** entre quienes vendieron y lleva la contabilidad.
 
-Contrastado con el kit `ecosistema-motor` (contrato 1.0): `contrato/REGLAS.md`, `docs/contrato.md`, `simuladores/ventas.mjs` y `simuladores/pasarela.mjs`. Los nombres de herramientas, alcances, estados, eventos y códigos de error son los del kit.
+Es el único servicio que maneja dinero. Contrastado con el kit `ecosistema-motor` (contrato 1.0).
 
-## Quién habla con quién
+## Quién es quién
 
-| Origen | Destino | Cómo | Alcance / protección |
-|---|---|---|---|
-| Taller | Ventas | MCP `crear_venta`, `consultar_venta`, `generar_cobro`, `anular_venta`, `consultar_liquidacion` | Cliente `taller`, alcance `ventas.crear` |
-| App del cliente | Ventas | MCP `consultar_venta`, `generar_cobro`, `consultar_liquidacion` | Cliente `app`, alcance `ventas.consultar` |
-| Ventas | Tienda y Concesionario | MCP `consultar_reserva`, `confirmar_reserva`, `liberar_reserva` | Cliente `ventas`, alcance `proveedor.confirmar` |
-| Ventas | Pasarela | `POST /api/cobros` y `POST /api/cobros/:id/reembolso` | Llave de API (`Authorization: Bearer`) |
-| Pasarela | Ventas | Webhook `POST /webhooks/pasarela` (`cobro.aprobado`, `cobro.rechazado`, `cobro.reembolsado`) | Firma `X-Pasarela-Firma`, máximo 5 min, idempotente por `evento_id` |
-| Ventas | Taller | `POST /eventos`: `venta.pagada`, `venta.liquidada`, `venta.pago_rechazado`, `venta.reembolsada` | Firma `X-Firma`; solo a `NOTIFICACIONES_PERMITIDAS` |
-| Auditor | Todos | `GET /bitacora?traza_id=` | Alcance `auditoria` |
+| Actor | Qué hace en la historia |
+|---|---|
+| **Cliente** | Es la persona que lleva su carro y paga. |
+| **Taller** (Falla) | Diagnostica, cotiza y le pide a Ventas que cobre. |
+| **Ventas** (Zaidy) | **Nosotros.** Cobra, confirma, reparte y registra. |
+| **Proveedores** (José y Emerson) | La tienda de repuestos y el concesionario. Tienen los repuestos reservados. |
+| **Pasarela** | Donde el cliente paga. Es simulada y viene en el kit. |
 
-Estados de una venta: `pendiente_pago`, `pago_rechazado`, `pagada`, `liquidada`, `reembolsada`, `anulada` y `en_revision`.
+## Palabras que verás
 
-## 1. Camino feliz: de la venta a la liquidación
+| Palabra | Qué significa |
+|---|---|
+| **Reserva** | Repuestos apartados para esa orden, con el precio congelado y una hora de vencimiento. |
+| **Cobro** | La orden de pago que Ventas crea en la pasarela. Trae un enlace para que el cliente pague. |
+| **Webhook** | El aviso automático que la pasarela le manda a Ventas cuando el cliente pagó. Va firmado, y puede llegar repetido. |
+| **Liquidar** | Calcular cuánto le toca a cada uno del dinero recibido. |
+| **Dispersión** | El reparto: a cada beneficiario se le registra su parte. En el kit es un registro contable, no una transferencia real. |
+| **Comisión** | El 3 % que se queda la plataforma por el servicio, más el IVA de esa comisión. |
+| **Compensación** | Deshacer lo hecho cuando algo falla después del pago: liberar reservas y devolver el dinero. |
+| **en_revision** | Ventas se detiene y una persona revisa, porque algo no cuadró. Nunca dispersa dinero así. |
+
+## 1. La venta completa, en cuatro fases
+
+Línea continua: una petición. Línea punteada: una respuesta o un aviso.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor C as Cliente
-    participant T as Taller (Falla)
-    participant V as VENTAS (Zaidy)
-    participant P as Tienda / Concesionario
-    participant G as Pasarela simulada
-
-    Note over T,P: Antes: el taller ya diagnosticó, cotizó y reservó repuestos<br/>con precio congelado y vencimiento. El cliente aprobó la opción.
-
-    T->>V: MCP crear_venta (orden_id, pagador, lineas, clave_idempotencia, traza_id, url_notificacion)
-    Note right of V: Valida el token y el alcance ventas.crear.<br/>Misma clave y mismos datos devuelve la misma venta.<br/>Misma clave con otros datos: IDEMPOTENCIA_CONFLICTO.<br/>url_notificacion fuera de la lista permitida: DATOS_INVALIDOS.
-
-    loop Por cada reserva de la venta
-        V->>P: MCP consultar_reserva (traza_id, reserva_id)
-        P-->>V: estado, items con precio, IVA y cantidad reales
-        Note right of V: La reserva debe estar activa (si no, RESERVA_VENCIDA),<br/>ser de la misma traza y no pertenecer a otra venta (ESTADO_INVALIDO).<br/>SKU, precio, IVA y cantidad deben coincidir: PRECIO_NO_COINCIDE.
-    end
-
-    Note right of V: Agente de Riesgo propone nivel y motivos.<br/>Si el riesgo es alto, la venta queda en revisión humana antes de cobrar.<br/>El código calcula IVA por línea, retención y total_a_pagar en pesos enteros.
-
-    alt total a pagar mayor que cero
-        V->>G: POST /api/cobros (monto entero, referencia = venta_id, url_webhook)
-        G-->>V: cobro_id y url_checkout
-        V-->>T: venta en pendiente_pago con url_pago
-        T-->>C: enlace de pago
-        C->>G: paga (Pagar aprobar)
-        G-->>V: webhook cobro.aprobado (firmado, puede llegar dos veces)
-        Note right of V: Verifica la firma y que tenga menos de 5 min.<br/>Guarda el evento_id solo cuando termina bien: un duplicado se ignora.<br/>El monto del cobro debe ser igual a total_a_pagar.
-    else total a pagar igual a cero (garantía completa)
-        Note right of V: No hay nada que cobrar:<br/>se confirma y se liquida de una vez.
-    end
-
-    V-->>T: evento venta.pagada
-
-    loop Por cada reserva
-        V->>P: MCP confirmar_reserva (traza_id, reserva_id, venta_id)
-        P-->>V: reserva confirmada con la guía de despacho
-    end
+    participant T as Taller
+    participant V as VENTAS (nosotros)
+    participant P as Proveedores<br/>(tienda y concesionario)
+    participant G as Pasarela
 
     rect rgb(238, 242, 255)
-    Note over V: Liquidación en una sola transacción de PostgreSQL<br/>1. Retención en la fuente si el pagador es retenedor (parámetros con vigencia)<br/>2. Comisión de la plataforma 3% más su IVA, por beneficiario<br/>3. Neto de cada beneficiario y dispersión transferida<br/>4. Asientos en partida doble: débitos igual a créditos
-    end
-
-    V-->>T: evento venta.liquidada (neto por beneficiario)
-    Note over T: La orden pasa a en_reparacion.
-    T-->>C: el taller puede empezar
-```
-
-Los eventos de una misma venta salen **en orden**: `venta.pagada` siempre antes que `venta.liquidada`.
-
-## 2. Fallos y compensaciones
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Cliente
-    participant T as Taller (Falla)
-    participant V as VENTAS (Zaidy)
-    participant P as Tienda / Concesionario
-    participant G as Pasarela simulada
-
-    rect rgb(254, 242, 242)
-    Note over C,G: A. Pago rechazado (escenario E3)
-    C->>G: intenta pagar y es rechazado
-    G-->>V: webhook cobro.rechazado
-    Note right of V: La venta pasa a pago_rechazado.
-    V-->>T: evento venta.pago_rechazado
-    T->>V: MCP generar_cobro
-    Note right of V: Vuelve a verificar que las reservas sigan activas.
-    V->>G: POST /api/cobros (cobro nuevo)
-    G-->>V: nuevo cobro_id y url_checkout
-    V-->>T: venta en pendiente_pago con enlace nuevo
-    C->>G: paga con éxito
-    G-->>V: webhook cobro.aprobado
-    Note over V: La venta se completa y se liquida una sola vez.
+    Note over T,G: FASE 1 · PREPARAR. El cliente ya aprobó la reparación
+    T->>V: Crear venta (qué se vende y quién paga)
+    V->>P: ¿Siguen vigentes las reservas y sus precios?
+    P-->>V: Sí, estos son los precios reales
+    Note over V: Si algún precio no coincide, Ventas rechaza la venta
+    V->>G: Crear el cobro por el total
+    G-->>V: Cobro creado con su enlace de pago
+    V-->>T: Venta lista y enlace de pago
+    T-->>C: Aquí está el enlace para pagar
     end
 
     rect rgb(255, 247, 237)
-    Note over C,G: B. Una reserva venció antes del pago: saga con compensación (escenario E4)
-    G-->>V: webhook cobro.aprobado
-    V-->>T: evento venta.pagada
-    V->>P: MCP confirmar_reserva
-    P-->>V: error RESERVA_VENCIDA
-    Note right of V: Ventas no puede des-cobrar.<br/>Compensa en orden y lo deja en la bitácora (saga_compensacion).
-    V->>P: MCP liberar_reserva (solo las reservas de esta venta)
-    P-->>V: unidades devueltas al inventario
-    V->>G: POST /api/cobros/:id/reembolso
-    G-->>V: cobro reembolsado
-    V-->>T: evento venta.reembolsada
-    Note over T: La orden queda en requiere_nueva_cotizacion y el taller cotiza de nuevo.
-    Note right of V: Si el reembolso falla, la venta queda en_revision.
-    end
-
-    rect rgb(245, 243, 255)
-    Note over C,G: C. Algo no cuadra: la baranda detiene el dinero
-    G-->>V: webhook con un monto distinto a total_a_pagar
-    Note right of V: La saga no improvisa.<br/>La venta queda en_revision y no dispersa nada.<br/>Lo mismo si la liquidación no cuadra.<br/>Una persona revisa la bitácora con el traza_id.
+    Note over T,G: FASE 2 · COBRAR
+    C->>G: Paga en la pasarela
+    G-->>V: Aviso: pago aprobado
+    Note over V: Revisa que el aviso sea auténtico y que el monto cuadre
+    V-->>T: Aviso: venta pagada
     end
 
     rect rgb(240, 253, 244)
-    Note over C,G: D. Ataques que Ventas rechaza (escenario E6)
-    T->>V: crear_venta con un precio alterado
-    V-->>T: PRECIO_NO_COINCIDE
-    T->>V: crear_venta con una reserva que ya es de otra venta
-    V-->>T: ESTADO_INVALIDO
-    G-->>V: webhook con firma falsa o de hace más de 5 min
-    Note right of V: Se rechaza con 401 y no cambia ningún estado.
-    T->>V: consultar_venta con la traza_id de otra orden
-    V-->>T: NO_ENCONTRADO
-    T->>V: crear_venta con url_notificacion externa
-    V-->>T: DATOS_INVALIDOS
+    Note over T,G: FASE 3 · CONFIRMAR A LOS PROVEEDORES
+    V->>P: Confirmar las reservas. Ya están pagadas
+    P-->>V: Confirmadas y listas para despachar
+    end
+
+    rect rgb(250, 245, 255)
+    Note over T,G: FASE 4 · REPARTIR EL DINERO Y REGISTRARLO
+    Note over V: Calcula la parte de cada uno:<br/>precio + IVA - retención - comisión
+    V->>T: Dispersión: la parte del taller
+    V->>P: Dispersión: la parte de cada proveedor
+    V->>V: La plataforma se queda con su comisión
+    Note over V: Registra todo en la contabilidad<br/>y comprueba que cuadre al peso
+    V-->>T: Aviso: venta liquidada, con lo repartido
+    T-->>C: Listo, el taller empieza la reparación
     end
 ```
 
-## 3. Dónde entran los agentes de IA de Ventas
+### Ejemplo con números reales (orden de Ana, opción económica)
+
+Ana pagó **$345.219**. Así se reparte:
+
+| Beneficiario | Base | IVA | Comisión (3 %) | IVA de la comisión | **Le llega** |
+|---|---|---|---|---|---|
+| Tienda | $147.600 | $28.044 | $4.428 | $841 | **$170.375** |
+| Taller | $142.500 | $27.075 | $4.275 | $812 | **$164.488** |
+| Plataforma (Ventas) | | | | | **$10.356** |
+| **Total** | | | | | **$345.219** |
+
+Lo que reciben tienda y taller, más lo que retiene la plataforma, es **exactamente** lo que pagó Ana. Si no cuadra, la venta queda en revisión.
+
+## 2. Cuando algo sale mal
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant V as Orquestador comercial (código)
+    actor C as Cliente
+    participant T as Taller
+    participant V as VENTAS (nosotros)
+    participant P as Proveedores
+    participant G as Pasarela
+
+    rect rgb(254, 242, 242)
+    Note over C,G: A. El pago es rechazado
+    C->>G: Intenta pagar
+    G-->>V: Aviso: pago rechazado
+    V-->>T: Aviso: pago rechazado
+    T->>V: Pide un cobro nuevo
+    V->>G: Crear un nuevo cobro
+    G-->>V: Nuevo enlace de pago
+    V-->>T: Enlace nuevo
+    C->>G: Paga con éxito
+    Note over V: La venta sigue su camino normal y se liquida una sola vez
+    end
+
+    rect rgb(255, 247, 237)
+    Note over C,G: B. La reserva venció antes de confirmar
+    G-->>V: Aviso: pago aprobado
+    V->>P: Confirmar las reservas
+    P-->>V: Error: una reserva ya venció
+    Note over V: No se puede despachar.<br/>Ventas deshace lo hecho, en este orden
+    V->>P: 1. Liberar las demás reservas
+    V->>G: 2. Devolver el dinero al cliente
+    V-->>T: 3. Aviso: venta reembolsada
+    Note over T: El taller vuelve a cotizar
+    end
+
+    rect rgb(245, 243, 255)
+    Note over C,G: C. Algo no cuadra
+    G-->>V: Aviso con un monto distinto al de la venta
+    Note over V: Ventas se detiene.<br/>Queda en revisión y NO reparte dinero.<br/>Una persona revisa la bitácora
+    end
+```
+
+### Ataques que Ventas rechaza
+
+| Qué intentan | Qué responde Ventas |
+|---|---|
+| Cobrar un precio distinto al de la reserva | `PRECIO_NO_COINCIDE` |
+| Usar una reserva que ya es de otra venta | `ESTADO_INVALIDO` |
+| Mandar un aviso de pago con firma falsa o vieja (más de 5 min) | Lo rechaza y no cambia nada |
+| Consultar una venta con la traza de otra orden | `NO_ENCONTRADO` |
+| Pedir que los avisos se envíen a una dirección externa | `DATOS_INVALIDOS` |
+| Repetir la misma petición | Devuelve lo mismo, sin cobrar dos veces. Con otros datos: `IDEMPOTENCIA_CONFLICTO` |
+
+## 3. Dónde ayuda la inteligencia artificial
+
+La IA solo propone. Quien decide siempre es el código, y ningún agente puede crear, cambiar ni anular una venta ni mover dinero.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant V as Ventas (código)
     participant R as Agente de Riesgo
     participant K as Agente de Cobro
     participant L as Agente de Conciliación
     participant A as Agente Contable
-    actor H as Persona (revisión)
+    actor H as Persona
 
-    Note over V,A: El agente propone, el código dispone.<br/>Ningún agente crea, cambia ni anula ventas o dispersiones.
-
-    V->>R: venta (montos inusuales, cliente nuevo, rechazos previos)
-    R-->>V: nivel de riesgo y motivos (JSON validado, plan B si falla)
-    alt riesgo alto o el modelo no responde
-        V->>H: venta en revisión humana antes de cobrar
-        H-->>V: aprueba o rechaza
+    V->>R: Esta venta, ¿es riesgosa?
+    R-->>V: Nivel de riesgo y motivos
+    alt Riesgo alto, o la IA no responde
+        V->>H: Revisión humana antes de cobrar
+        H-->>V: Aprueba o rechaza
     end
 
-    V->>K: venta con enlace de pago
-    K-->>V: mensaje para el cliente y recordatorios (sin escribir cifras propias)
+    V->>K: Venta con su enlace de pago
+    K-->>V: Mensaje y recordatorios para el cliente
 
-    V->>L: ventas, cobros y eventos del día
-    L-->>V: diferencias encontradas
-    Note over V,L: Una diferencia deja la venta en_revision.
+    V->>L: Ventas, cobros y avisos del día
+    L-->>V: Diferencias encontradas
 
-    V->>A: liquidación de una venta
-    A-->>V: explicación y cierre del día
-    Note over A: Lee la liquidación que calculó el código, no calcula dinero.
+    V->>A: Liquidación de una venta
+    A-->>V: Explicación y cierre del día
 ```
 
-El simulador de referencia del kit **no trae** el agente de Riesgo ni los demás: son parte del trabajo del grupo (Trabajos 4 y 5 del instructivo).
+El simulador del kit no trae estos agentes: los construye el grupo.
+
+## Referencia técnica (para programar)
+
+| Origen | Destino | Cómo | Protección |
+|---|---|---|---|
+| Taller | Ventas | `crear_venta`, `consultar_venta`, `generar_cobro`, `anular_venta`, `consultar_liquidacion` | Token OAuth, alcance `ventas.crear` |
+| Ventas | Proveedores | `consultar_reserva`, `confirmar_reserva`, `liberar_reserva` | Alcance `proveedor.confirmar` |
+| Ventas | Pasarela | `POST /api/cobros` y `POST /api/cobros/:id/reembolso` | Llave de API |
+| Pasarela | Ventas | `POST /webhooks/pasarela` | Firma `X-Pasarela-Firma`, máximo 5 min, `evento_id` único |
+| Ventas | Taller | `POST /eventos`: `venta.pagada`, `venta.liquidada`, `venta.pago_rechazado`, `venta.reembolsada` | Firma `X-Firma`, solo destinos permitidos |
+
+Estados de una venta: `pendiente_pago`, `pago_rechazado`, `pagada`, `liquidada`, `reembolsada`, `anulada` y `en_revision`. Los eventos de una misma venta salen en orden: `venta.pagada` antes que `venta.liquidada`.
 
 ## Imágenes
 
-Por si tu visor no dibuja Mermaid: [camino feliz](diagramas/ventas-1-camino-feliz.png), [fallos y compensaciones](diagramas/ventas-2-fallos-y-compensaciones.png) y [agentes](diagramas/ventas-3-agentes.png).
+Por si tu visor no dibuja Mermaid: [venta completa](diagramas/ventas-1-camino-feliz.png), [cuando algo sale mal](diagramas/ventas-2-fallos-y-compensaciones.png) y [agentes](diagramas/ventas-3-agentes.png).
